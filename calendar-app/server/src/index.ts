@@ -1,5 +1,6 @@
 import express from 'express';
 import cors from 'cors';
+import path from 'path';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import jwt from 'jsonwebtoken';
@@ -11,20 +12,31 @@ import db from './db';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'calendar-app-secret-key-change-in-production';
 const PORT = parseInt(process.env.PORT || '3001', 10);
+const IS_PROD = process.env.NODE_ENV === 'production';
+const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || 'http://localhost:5173';
 
 const app = express();
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
-  cors: { origin: 'http://localhost:5173', credentials: true }
+  cors: IS_PROD ? false : { origin: CLIENT_ORIGIN, credentials: true }
 });
 
-app.use(cors({ origin: 'http://localhost:5173', credentials: true }));
+if (!IS_PROD) {
+  app.use(cors({ origin: CLIENT_ORIGIN, credentials: true }));
+}
 app.use(express.json());
 
 app.use('/api/auth', authRouter);
 app.use('/api/calendars', calendarsRouter);
 app.use('/api/events', eventsRouter);
 app.use('/api/invitations', invitationsRouter);
+
+// 本番環境ではビルド済みクライアントを配信
+if (IS_PROD) {
+  const clientDist = path.join(__dirname, '../../client/dist');
+  app.use(express.static(clientDist));
+  app.get('*', (_req, res) => res.sendFile(path.join(clientDist, 'index.html')));
+}
 
 setIo(io);
 
@@ -43,7 +55,6 @@ io.use((socket, next) => {
 io.on('connection', (socket) => {
   const userId: string = socket.data.userId;
 
-  // ユーザーがアクセスできるカレンダーのルームに参加
   const calendars = db.prepare('SELECT calendar_id FROM calendar_members WHERE user_id = ?').all(userId) as { calendar_id: string }[];
   calendars.forEach(({ calendar_id }) => socket.join(`calendar:${calendar_id}`));
 
