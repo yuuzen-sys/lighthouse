@@ -33,6 +33,15 @@ db.exec(`
     PRIMARY KEY (calendar_id, user_id)
   );
 
+  CREATE TABLE IF NOT EXISTS invitations (
+    token TEXT PRIMARY KEY,
+    calendar_id TEXT NOT NULL REFERENCES calendars(id) ON DELETE CASCADE,
+    role TEXT NOT NULL DEFAULT 'viewer',
+    created_by TEXT NOT NULL REFERENCES users(id),
+    expires_at TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
   CREATE TABLE IF NOT EXISTS events (
     id TEXT PRIMARY KEY,
     calendar_id TEXT NOT NULL REFERENCES calendars(id) ON DELETE CASCADE,

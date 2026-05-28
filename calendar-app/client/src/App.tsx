@@ -8,8 +8,13 @@ import CalendarView from './components/CalendarView';
 import EventModal from './components/EventModal';
 import type { Calendar, CalendarEvent } from './types';
 
+function getInviteToken(): string | undefined {
+  return new URLSearchParams(window.location.search).get('invite') ?? undefined;
+}
+
 export default function App() {
-  const { user, loading, login, register, logout } = useAuth();
+  const { user, loading, login, register, logout, joinByInvite } = useAuth();
+  const [inviteToken] = useState<string | undefined>(getInviteToken);
   const [calendars, setCalendars] = useState<Calendar[]>([]);
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [visibleCalendars, setVisibleCalendars] = useState<Set<string>>(new Set());
@@ -51,7 +56,7 @@ export default function App() {
   function handleDeleted() { closeModal(); loadEvents(); }
 
   if (loading) return <div style={loadingStyle}>読み込み中...</div>;
-  if (!user) return <AuthPage onLogin={login} onRegister={register} />;
+  if (!user) return <AuthPage onLogin={login} onRegister={register} onJoinByInvite={joinByInvite} inviteToken={inviteToken} />;
 
   return (
     <div style={appStyle}>

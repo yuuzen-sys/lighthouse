@@ -6,6 +6,7 @@ import jwt from 'jsonwebtoken';
 import authRouter from './routes/auth';
 import calendarsRouter from './routes/calendars';
 import eventsRouter, { setIo } from './routes/events';
+import invitationsRouter from './routes/invitations';
 import db from './db';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'calendar-app-secret-key-change-in-production';
@@ -23,6 +24,7 @@ app.use(express.json());
 app.use('/api/auth', authRouter);
 app.use('/api/calendars', calendarsRouter);
 app.use('/api/events', eventsRouter);
+app.use('/api/invitations', invitationsRouter);
 
 setIo(io);
 

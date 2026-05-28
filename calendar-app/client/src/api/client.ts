@@ -74,4 +74,16 @@ export const api = {
     delete: (id: string) =>
       request<{ ok: boolean }>(`/events/${id}`, { method: 'DELETE' }),
   },
+  invitations: {
+    create: (calendar_id: string, role: 'editor' | 'viewer') =>
+      request<{ token: string }>('/invitations', {
+        method: 'POST', body: JSON.stringify({ calendar_id, role }),
+      }),
+    get: (token: string) =>
+      request<{ invitation: { token: string; role: string; calendar_name: string; calendar_color: string; inviter_name: string } }>(`/invitations/${token}`),
+    join: (token: string, name: string) =>
+      request<{ token: string; user: import('../types').User }>(`/invitations/${token}/join`, {
+        method: 'POST', body: JSON.stringify({ name }),
+      }),
+  },
 };

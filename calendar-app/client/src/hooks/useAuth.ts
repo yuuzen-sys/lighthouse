@@ -32,5 +32,11 @@ export function useAuth() {
     setUser(null);
   }, []);
 
-  return { user, loading, login, register, logout };
+  const joinByInvite = useCallback(async (token: string, name: string) => {
+    const { token: jwt, user } = await api.invitations.join(token, name);
+    localStorage.setItem('token', jwt);
+    setUser(user);
+  }, []);
+
+  return { user, loading, login, register, logout, joinByInvite };
 }

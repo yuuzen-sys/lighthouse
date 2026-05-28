@@ -1,4 +1,4 @@
-import { useState, useEffect, FormEvent } from 'react';
+import { useState, useEffect } from 'react';
 import { api } from '../api/client';
 import type { Calendar, CalendarMember } from '../types';
 
@@ -14,15 +14,16 @@ export default function CalendarManager({ calendar, onClose, onChanged }: Props)
   const [name, setName] = useState(calendar.name);
   const [color, setColor] = useState(calendar.color);
   const [members, setMembers] = useState<CalendarMember[]>([]);
-  const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState<'editor' | 'viewer'>('viewer');
+  const [inviteLink, setInviteLink] = useState('');
+  const [copied, setCopied] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
     api.calendars.members(calendar.id).then(d => setMembers(d.members));
   }, [calendar.id]);
 
-  async function handleUpdate(e: FormEvent) {
+  async function handleUpdate(e: React.FormEvent) {
     e.preventDefault();
     try {
       await api.calendars.update(calendar.id, { name, color });
@@ -32,17 +33,22 @@ export default function CalendarManager({ calendar, onClose, onChanged }: Props)
     }
   }
 
-  async function handleInvite(e: FormEvent) {
-    e.preventDefault();
-    setError('');
+  async function handleGenerateLink() {
+    setError(''); setInviteLink('');
     try {
-      await api.calendars.addMember(calendar.id, inviteEmail, inviteRole);
-      setInviteEmail('');
-      const d = await api.calendars.members(calendar.id);
-      setMembers(d.members);
+      const { token } = await api.invitations.create(calendar.id, inviteRole);
+      const url = `${window.location.origin}/?invite=${token}`;
+      setInviteLink(url);
+      setCopied(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'エラー');
     }
+  }
+
+  async function handleCopy() {
+    await navigator.clipboard.writeText(inviteLink);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   }
 
   async function handleRemove(userId: string) {
@@ -102,15 +108,25 @@ export default function CalendarManager({ calendar, onClose, onChanged }: Props)
             </div>
           ))}
 
-          <form onSubmit={handleInvite} style={styles.inviteForm}>
-            <h4 style={styles.inviteTitle}>メンバーを招待</h4>
-            <input style={styles.input} type="email" placeholder="メールアドレス" value={inviteEmail} onChange={e => setInviteEmail(e.target.value)} required />
+          <div style={styles.inviteForm}>
+            <h4 style={styles.inviteTitle}>招待リンクを生成</h4>
             <select style={styles.select} value={inviteRole} onChange={e => setInviteRole(e.target.value as 'editor' | 'viewer')}>
-              <option value="editor">編集者</option>
-              <option value="viewer">閲覧者</option>
+              <option value="viewer">閲覧者（見るだけ）</option>
+              <option value="editor">編集者（追加・編集可）</option>
             </select>
-            <button style={styles.inviteBtn} type="submit">招待する</button>
-          </form>
+            <button style={styles.inviteBtn} type="button" onClick={handleGenerateLink}>
+              リンクを生成する
+            </button>
+            {inviteLink && (
+              <div style={styles.linkBox}>
+                <span style={styles.linkText}>{inviteLink}</span>
+                <button style={{ ...styles.copyBtn, ...(copied ? styles.copiedBtn : {}) }} onClick={handleCopy}>
+                  {copied ? 'コピー済み ✓' : 'コピー'}
+                </button>
+              </div>
+            )}
+            <p style={styles.inviteNote}>※ リンクは7日間有効です。名前だけで参加できます。</p>
+          </div>
         </div>
 
         {!calendar.is_default && (
@@ -153,6 +169,11 @@ const styles: Record<string, React.CSSProperties> = {
   inviteForm: { display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8, padding: 12, background: '#f8fafc', borderRadius: 8 },
   inviteTitle: { fontSize: 13, fontWeight: 700, margin: 0, color: '#64748b' },
   inviteBtn: { padding: '9px', background: '#10b981', color: '#fff', border: 'none', borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: 'pointer' },
+  linkBox: { display: 'flex', alignItems: 'center', gap: 8, background: '#fff', border: '1.5px solid #e2e8f0', borderRadius: 8, padding: '8px 10px' },
+  linkText: { flex: 1, fontSize: 11, color: '#334155', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+  copyBtn: { border: 'none', background: '#3b82f6', color: '#fff', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap' },
+  copiedBtn: { background: '#10b981' },
+  inviteNote: { margin: 0, fontSize: 11, color: '#94a3b8' },
   deleteBtn: { padding: '9px', background: '#fff', color: '#ef4444', border: '1.5px solid #fecaca', borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: 'pointer' },
   error: { color: '#ef4444', fontSize: 13, margin: '0 1.5rem 1rem', textAlign: 'center' },
 };
