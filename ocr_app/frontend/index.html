@@ -994,6 +994,10 @@ let filterGroups    = [];   // OR match against the device's group
 let _renameParts   = [];   // accumulated tag segments for multi-tag rename
 let filterPanelOpen = false;
 
+// 店舗コードから暗黙キャリアを返す（量販以外の DS/au/SB 系店舗用）
+const _CODE_TO_CARRIER = { 'DS':'ドコモ', '出DS':'ドコモ', 'au':'au', '出au':'au', 'SB':'SB', '出SB':'SB' };
+function _implicitCarrier(storeCode) { return _CODE_TO_CARRIER[storeCode] || null; }
+
 const GROUP_META = {
   'iPhone':  ['最新iPhone', '中古iPhone'],
   'Android': ['主要Android', 'その他Android', '廉価（国産）Android', '廉価（中華）Android'],
@@ -1010,7 +1014,11 @@ function _filteredPhotos() {
     if (filterStatus    && p.status !== filterStatus)         return false;
     if (filterDevice    && p.device_name !== filterDevice)    return false;
     if (filterNonDevCat && p.non_device_category !== filterNonDevCat) return false;
-    if (filterCarriers.length  && !filterCarriers.some(c  => (p.carriers       || []).includes(c)))  return false;
+    if (filterCarriers.length) {
+      const implicit = _implicitCarrier(p.store_code);
+      const effective = implicit ? [...(p.carriers || []), implicit] : (p.carriers || []);
+      if (!filterCarriers.some(c => effective.includes(c))) return false;
+    }
     if (filterContracts.length && !filterContracts.some(c => (p.contract_types || []).includes(c))) return false;
     if (filterGroups.length) {
       const g = _deviceGroup(p);
