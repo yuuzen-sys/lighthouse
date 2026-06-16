@@ -570,7 +570,7 @@
 <div class="overlay hidden" id="export-modal">
   <div class="export-modal">
     <div class="modal-header">
-      <h2>📂 写真保存 / エクスポート</h2>
+      <h2>📂 写真ダウンロード</h2>
       <button class="btn btn-outline btn-sm" onclick="closeExportModal()">✕ 閉じる</button>
     </div>
     <div style="padding:16px;display:flex;flex-direction:column;gap:14px;overflow-y:auto">
@@ -601,13 +601,6 @@
         </select>
       </div>
 
-      <!-- 保存先フォルダ -->
-      <div class="form-group">
-        <label>保存先フォルダ（サーバPC上のパス）</label>
-        <input type="text" id="exp-dest" placeholder="例: C:\Users\yuuze\Desktop\export" oninput="refreshExportCount()">
-        <div style="font-size:11px;color:#888;margin-top:3px">フォルダが存在しない場合は自動作成します</div>
-      </div>
-
       <!-- プレビュー -->
       <div class="export-preview-box">
         <div class="export-count-label" id="exp-count-label">— 件数を確認してください</div>
@@ -619,13 +612,13 @@
         <b>確定済みファイル名の形式：</b><br>
         【店舗コード】店舗名 備考(機種名).拡張子<br>
         例: <span style="font-family:monospace">【量販06】ビックカメラ 柏店 d割引POP(I17).jpg</span><br>
-        同名ファイルが存在する場合は <code>(2)</code>, <code>(3)</code>… を付加します
+        ZIP でまとめてダウンロードされます。同名ファイルには <code>(2)</code>, <code>(3)</code>… を付加します
       </div>
     </div>
 
     <div class="modal-footer">
       <button class="btn btn-outline btn-sm" onclick="closeExportModal()">キャンセル</button>
-      <button class="btn btn-primary" id="exp-exec-btn" onclick="doExport()" disabled>⬇ 保存実行</button>
+      <button class="btn btn-primary" id="exp-exec-btn" onclick="doExport()" disabled>⬇ ZIPダウンロード</button>
     </div>
   </div>
 </div>
@@ -1908,7 +1901,6 @@ async function openExportModal() {
 
   document.getElementById('export-modal').classList.remove('hidden');
   document.getElementById('exp-mode').value = 'store';
-  document.getElementById('exp-dest').value = '';
   document.getElementById('exp-exec-btn').disabled = true;
   onExportModeChange();
 }
@@ -1928,7 +1920,6 @@ async function refreshExportCount() {
   const mode    = document.getElementById('exp-mode').value;
   const storeId = document.getElementById('exp-store').value;
   const devVal  = document.getElementById('exp-device').value;
-  const dest    = document.getElementById('exp-dest').value.trim();
 
   let url = `/api/export/count?mode=${mode}`;
   if (storeId && mode !== 'device') url += `&store_id=${storeId}`;
@@ -1941,13 +1932,13 @@ async function refreshExportCount() {
   try {
     const data = await apiFetch(url);
     const modeLabel = { store: '確定済み（店舗別）', device: '確定済み（端末別）', unprocessed: '未処理写真' }[mode];
-    labelEl.textContent = `${modeLabel}: ${data.count} 枚が保存対象`;
-    execBtn.disabled = data.count === 0 || !dest;
+    labelEl.textContent = `${modeLabel}: ${data.count} 枚がダウンロード対象`;
+    execBtn.disabled = data.count === 0;
 
-    if (mode !== 'unprocessed') {
-      sampleEl.textContent = '保存先: ' + (dest || '（パスを入力してください）');
+    if (mode === 'unprocessed') {
+      sampleEl.textContent = 'pending / skip / error ステータスの写真を元ファイル名で ZIP にまとめます';
     } else {
-      sampleEl.textContent = 'pending / skip / error ステータスの写真を元ファイル名で保存します';
+      sampleEl.textContent = 'リネーム済みファイル名で ZIP にまとめてダウンロードします';
     }
   } catch (e) {
     labelEl.textContent = '件数取得エラー: ' + e.message;
@@ -1959,37 +1950,38 @@ async function doExport() {
   const mode    = document.getElementById('exp-mode').value;
   const storeId = document.getElementById('exp-store').value;
   const devVal  = document.getElementById('exp-device').value;
-  const dest    = document.getElementById('exp-dest').value.trim();
-
-  if (!dest) { toast('保存先フォルダを入力してください'); return; }
 
   const btn = document.getElementById('exp-exec-btn');
-  btn.disabled = true; btn.textContent = '保存中...';
+  btn.disabled = true; btn.textContent = 'ZIP作成中...';
 
   try {
-    const endpoint = mode === 'unprocessed'
-      ? '/api/export/unprocessed'
-      : '/api/export/confirmed';
+    let url = `/api/export/zip?mode=${mode}`;
+    if (storeId && mode !== 'device') url += `&store_id=${storeId}`;
+    if (devVal  && mode === 'device') url += `&device_name=${encodeURIComponent(devVal)}`;
 
-    const body = { dest_folder: dest };
-    if (storeId && mode !== 'device')  body.store_id    = Number(storeId);
-    if (devVal  && mode === 'device')  body.device_name = devVal;
-
-    const data = await apiFetch(endpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body)
+    const res = await fetch(url, {
+      headers: authToken ? { 'Authorization': `Bearer ${authToken}` } : {}
     });
+    if (res.status === 401) {
+      authToken = null; currentUsername = null;
+      localStorage.removeItem('lighthouse_token');
+      _showLoginModal();
+      return;
+    }
+    if (!res.ok) { toast('エラー: ' + await res.text()); return; }
 
-    const skippedMsg = data.skipped ? ` (${data.skipped}枚スキップ)` : '';
-    toast(`✅ ${data.copied}枚を保存しました${skippedMsg}`);
-    document.getElementById('exp-count-label').textContent =
-      `完了: ${data.copied}枚 → ${data.dest}`;
+    const blob = await res.blob();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `photos_${new Date().toISOString().slice(0,10)}.zip`;
+    a.click();
+
+    toast('✅ ZIPダウンロードを開始しました');
     closeExportModal();
   } catch (err) {
     toast('エラー: ' + err.message);
   } finally {
-    btn.disabled = false; btn.textContent = '⬇ 保存実行';
+    btn.disabled = false; btn.textContent = '⬇ ZIPダウンロード';
   }
 }
 

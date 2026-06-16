@@ -13,7 +13,7 @@ from pathlib import Path
 from datetime import datetime
 
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Request
-from fastapi.responses import FileResponse, StreamingResponse, JSONResponse
+from fastapi.responses import FileResponse, StreamingResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -1094,13 +1094,13 @@ def export_excel(store_id: int | None = None):
 
     buf = io.BytesIO()
     wb.save(buf)
-    buf.seek(0)
+    content = buf.getvalue()
 
     filename = f"photos_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
-    return StreamingResponse(
-        buf,
+    return Response(
+        content=content,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f"attachment; filename={filename}"}
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
 
@@ -1137,6 +1137,71 @@ class FileExportRequest(BaseModel):
     dest_folder: str
     store_id: int | None = None
     device_name: str | None = None
+
+
+@app.get("/api/export/zip")
+def export_zip(mode: str = "confirmed", store_id: int | None = None, device_name: str | None = None):
+    """Stream a ZIP of photos to the browser. mode=confirmed|unprocessed."""
+    import zipfile
+
+    if mode == "unprocessed":
+        q = "SELECT stored_filename, original_filename FROM photos WHERE status IN ('pending','skip','error')"
+        params: list = []
+        if store_id:
+            q += " AND store_id = ?"; params.append(store_id)
+    else:
+        q = """SELECT p.stored_filename, p.renamed_filename, p.original_filename,
+                      s.code as store_code, s.name as store_name,
+                      p.device_name, p.note, p.non_device_category, p.price
+               FROM photos p LEFT JOIN stores s ON p.store_id = s.id
+               WHERE p.status = 'done'"""
+        params = []
+        if store_id:
+            q += " AND p.store_id = ?"; params.append(store_id)
+        if device_name:
+            q += " AND p.device_name = ?"; params.append(device_name)
+
+    with get_conn() as conn:
+        rows = conn.execute(q, params).fetchall()
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        seen: dict[str, int] = {}
+        for row in rows:
+            r = dict(row)
+            src = UPLOAD_DIR / r["stored_filename"]
+            if not src.exists():
+                continue
+
+            orig_suffix = Path(r["stored_filename"]).suffix.lower() or ".jpg"
+            if mode == "unprocessed":
+                fname = _sanitize_filename(Path(r["original_filename"]).stem) + Path(r["original_filename"]).suffix
+            elif r.get("renamed_filename"):
+                base = Path(r["renamed_filename"])
+                fname = _sanitize_filename(base.stem) + (base.suffix or orig_suffix)
+            else:
+                fname = _build_renamed(
+                    r.get("store_code") or "", r.get("store_name") or "",
+                    r.get("note") or "", r.get("device_name") or "", orig_suffix,
+                )
+
+            # Deduplicate names inside the ZIP
+            if fname in seen:
+                seen[fname] += 1
+                stem, ext = Path(fname).stem, Path(fname).suffix
+                fname = f"{stem} ({seen[fname]}){ext}"
+            else:
+                seen[fname] = 1
+
+            with open(src, "rb") as f:
+                zf.writestr(fname, f.read())
+
+    zip_name = f"photos_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip"
+    return Response(
+        content=buf.getvalue(),
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{zip_name}"'},
+    )
 
 
 @app.get("/api/export/count")
