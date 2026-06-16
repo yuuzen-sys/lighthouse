@@ -117,27 +117,13 @@ def run_claude_vision(image_path: str, api_key: str) -> str:
 def process_image(image_path: str, api_key: str | None = None, confidence_threshold: float = 0.5) -> dict:
     """
     Process an image with OCR.
-    Uses EasyOCR first; if avg confidence < threshold and api_key provided, falls back to Claude.
-
-    Returns:
-        {
-            "raw_text": str,
-            "engine": "easyocr" | "claude",
-            "confidence": float | None,
-        }
+    If api_key is provided, uses Claude Vision directly (no EasyOCR — avoids 2 GB RAM load).
+    Falls back to EasyOCR only when no api_key is set (local use without API key).
     """
-    text, confidence = run_easyocr(image_path)
-
-    if confidence < confidence_threshold and api_key:
+    if api_key:
         claude_text = run_claude_vision(image_path, api_key)
-        return {
-            "raw_text": claude_text,
-            "engine": "claude",
-            "confidence": None,
-        }
+        return {"raw_text": claude_text, "engine": "claude", "confidence": None}
 
-    return {
-        "raw_text": text,
-        "engine": "easyocr",
-        "confidence": round(confidence, 3),
-    }
+    # EasyOCR fallback (local deployment, no API key)
+    text, confidence = run_easyocr(image_path)
+    return {"raw_text": text, "engine": "easyocr", "confidence": round(confidence, 3)}
