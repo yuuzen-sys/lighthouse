@@ -1,0 +1,2436 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lighthouse</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', system-ui, sans-serif; background: #f0f2f5; color: #1a1a2e; }
+
+  /* ── Layout ── */
+  #app { display: flex; flex-direction: column; height: 100vh; }
+  header { background: #1e3a5f; color: white; padding: 10px 20px; display: flex; align-items: center; gap: 12px; }
+  header h1 { font-size: 15px; font-weight: 600; }
+  .main { display: flex; flex: 1; overflow: hidden; }
+  .sidebar { width: 250px; background: white; border-right: 1px solid #dde; overflow-y: auto; }
+  .content { flex: 1; overflow-y: auto; padding: 14px; }
+
+  /* ── Sidebar ── */
+  .sidebar-section { padding: 10px 12px; border-bottom: 1px solid #eee; }
+  .sidebar-section h3 { font-size: 10px; color: #999; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+  .store-item { padding: 7px 8px; border-radius: 5px; cursor: pointer; font-size: 13px; display: flex; align-items: center; gap: 6px; }
+  .store-item:hover { background: #f0f4ff; }
+  .store-item.active { background: #e8efff; color: #1e3a5f; font-weight: 600; }
+  .store-code-tag { font-size: 10px; color: #fff; background: #7a9cc8; padding: 1px 5px; border-radius: 3px; white-space: nowrap; }
+
+  /* ── Buttons ── */
+  .btn { padding: 6px 13px; border: none; border-radius: 5px; cursor: pointer; font-size: 13px; font-weight: 500; transition: opacity 0.15s; white-space: nowrap; }
+  .btn:hover { opacity: 0.85; }
+  .btn-primary { background: #1e3a5f; color: white; }
+  .btn-success { background: #16a34a; color: white; }
+  .btn-warning { background: #d97706; color: white; }
+  .btn-danger  { background: #dc2626; color: white; }
+  .btn-sm { padding: 4px 10px; font-size: 12px; }
+  .btn-outline { background: white; border: 1px solid #ccc; color: #333; }
+  .btn-ghost { background: transparent; border: 1px solid rgba(255,255,255,0.4); color: white; }
+
+  /* ── Photo Grid ── */
+  .toolbar { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
+  .photo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; }
+  .photo-card { background: white; border-radius: 7px; overflow: hidden; border: 2px solid #e0e0e0; transition: border-color 0.15s; cursor: pointer; }
+  .photo-card:hover { border-color: #1e3a5f; }
+  .photo-card.status-pending   { border-color: #ddd; }
+  .photo-card.status-analyzing { border-color: #3b82f6; animation: pulse-blue 1.4s ease-in-out infinite; }
+  .photo-card.status-analyzed  { border-color: #d97706; }
+  .photo-card.status-confirmed { border-color: #2563eb; }
+  .photo-card.status-done      { border-color: #16a34a; }
+  .photo-card.status-skip      { border-color: #d1d5db; opacity: 0.55; }
+  .photo-card.status-error     { border-color: #dc2626; }
+  @keyframes pulse-blue { 0%,100%{border-color:#3b82f6} 50%{border-color:#93c5fd} }
+  .photo-thumb { width: 100%; height: 130px; object-fit: cover; display: block; }
+  .photo-info { padding: 7px 8px; }
+  .photo-name { font-size: 10px; color: #888; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .photo-device { font-size: 12px; font-weight: 600; margin-top: 2px; min-height: 16px; }
+  .photo-price { font-size: 12px; color: #dc2626; }
+  .status-chip { display: inline-block; font-size: 10px; padding: 1px 5px; border-radius: 8px; margin-top: 3px; }
+  .chip-pending   { background: #f0f0f0; color: #888; }
+  .chip-analyzing { background: #dbeafe; color: #1e40af; }
+  .chip-analyzed  { background: #fef3c7; color: #92400e; }
+  .chip-confirmed { background: #dbeafe; color: #1e40af; }
+  .chip-done      { background: #dcfce7; color: #166534; }
+  .chip-skip      { background: #f3f4f6; color: #9ca3af; text-decoration: line-through; }
+  .chip-error     { background: #fee2e2; color: #991b1b; }
+
+  /* ── Modal base ── */
+  .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.55); z-index: 100; display: flex; align-items: center; justify-content: center; }
+  .overlay.hidden { display: none; }
+
+  /* ── Photo modal ── */
+  .photo-modal { background: white; border-radius: 10px; width: 92vw; max-width: 1100px; max-height: 92vh; display: flex; flex-direction: column; }
+  .modal-header { padding: 12px 16px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .modal-header h2 { font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .modal-body { display: flex; flex: 1; overflow: hidden; min-height: 0; }
+  .image-area { flex: 1; background: #111; display: flex; align-items: center; justify-content: center; overflow: hidden; position: relative; min-width: 0; }
+  .image-area img { max-width: 100%; max-height: 100%; object-fit: contain; transform-origin: center; transition: transform 0.08s; user-select: none; pointer-events: none; }
+  .image-area.panning { cursor: grabbing !important; }
+  .image-area.zoomable { cursor: grab; }
+  .zoom-ctrl { position: absolute; bottom: 10px; right: 10px; display: flex; gap: 5px; align-items: center; }
+  .zoom-label { font-size: 11px; color: white; background: rgba(0,0,0,0.5); padding: 2px 7px; border-radius: 4px; }
+  .form-panel { width: 310px; padding: 14px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; border-left: 1px solid #eee; }
+  .form-group label { display: block; font-size: 11px; color: #666; margin-bottom: 3px; font-weight: 500; }
+  .form-group select, .form-group input, .form-group textarea {
+    width: 100%; padding: 7px 9px; border: 1px solid #ccc; border-radius: 5px; font-size: 13px; font-family: inherit;
+  }
+  .form-group select:focus, .form-group input:focus, .form-group textarea:focus { outline: none; border-color: #1e3a5f; }
+  .candidate-list { display: flex; flex-direction: column; gap: 3px; }
+  .cand-chip { padding: 5px 9px; background: #f0f4ff; border: 1px solid #c8d8f0; border-radius: 5px; font-size: 12px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
+  .cand-chip:hover { background: #dce8ff; }
+  .cand-score { color: #999; font-size: 11px; }
+  .raw-box { font-size: 11px; color: #555; background: #f8f8f8; border: 1px solid #e8e8e8; border-radius: 4px; padding: 7px; max-height: 100px; overflow-y: auto; white-space: pre-wrap; font-family: monospace; }
+  .rename-preview { font-size: 12px; color: #1e3a5f; background: #f0f4ff; padding: 6px 8px; border-radius: 4px; word-break: break-all; min-height: 22px; }
+  .modal-footer { padding: 10px 16px; border-top: 1px solid #eee; display: flex; gap: 7px; justify-content: flex-end; }
+
+  /* ── Settings modal ── */
+  .settings-modal { background: white; border-radius: 10px; width: 680px; max-height: 88vh; display: flex; flex-direction: column; }
+  .settings-tabs { display: flex; border-bottom: 1px solid #eee; }
+  .tab-btn { padding: 10px 18px; background: none; border: none; font-size: 13px; cursor: pointer; color: #888; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+  .tab-btn.active { color: #1e3a5f; font-weight: 600; border-bottom-color: #1e3a5f; }
+  .tab-content { flex: 1; overflow-y: auto; padding: 16px; display: none; }
+  .tab-content.active { display: block; }
+
+  /* ── Settings – store import ── */
+  .hint { font-size: 11px; color: #888; margin-bottom: 6px; }
+  .import-area { width: 100%; height: 240px; font-family: monospace; font-size: 12px; padding: 9px; border: 1px solid #ccc; border-radius: 6px; resize: vertical; }
+
+  /* ── Settings – candidates ── */
+  .cat-block { margin-bottom: 14px; }
+  .cat-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+  .cat-name { font-size: 12px; font-weight: 700; color: #1e3a5f; }
+  .device-tags { display: flex; flex-wrap: wrap; gap: 5px; }
+  .device-tag { display: flex; align-items: center; gap: 4px; background: #f0f4ff; border: 1px solid #c8d8f0; border-radius: 14px; padding: 3px 10px; font-size: 12px; }
+  .device-tag .remove { cursor: pointer; color: #999; font-size: 14px; line-height: 1; }
+  .device-tag .remove:hover { color: #dc2626; }
+  .add-device-row { display: flex; gap: 6px; margin-top: 8px; }
+  .add-device-row input { flex: 1; padding: 5px 8px; border: 1px solid #ccc; border-radius: 5px; font-size: 12px; }
+  .add-device-row select { padding: 5px 8px; border: 1px solid #ccc; border-radius: 5px; font-size: 12px; }
+
+  /* ── Store delete button in sidebar ── */
+  .store-del-btn { opacity:0; color:#dc2626; cursor:pointer; font-size:12px; padding:2px 5px; border-radius:3px; line-height:1; transition:opacity 0.1s; flex-shrink:0; }
+  .store-item:hover .store-del-btn { opacity:1; }
+  .store-del-btn:hover { background:#fee2e2; }
+
+  /* ── Store delete modal ── */
+  .store-del-modal { background:white; border-radius:10px; width:480px; display:flex; flex-direction:column; }
+  .sdel-warning { background:#fef3c7; border:1px solid #f59e0b; border-radius:6px; padding:10px 12px; font-size:13px; color:#78350f; line-height:1.75; }
+  .sdel-checklist { display:flex; flex-direction:column; gap:10px; }
+  .sdel-check-label { display:flex; align-items:flex-start; gap:10px; font-size:13px; cursor:pointer; line-height:1.5; }
+  .sdel-check-label input[type=checkbox] { margin-top:2px; width:15px; height:15px; cursor:pointer; flex-shrink:0; }
+
+  /* ── Misc ── */
+  .empty-state { text-align: center; color: #bbb; padding: 60px 20px; }
+  .drop-zone { border: 2px dashed #b0c0d8; border-radius: 7px; padding: 12px 16px; display: flex; align-items: center; gap: 10px; cursor: pointer; flex: 1; color: #888; font-size: 13px; transition: all 0.15s; }
+  .drop-zone.drag-over { border-color: #1e3a5f; background: #f0f4ff; color: #1e3a5f; }
+  .progress-wrap { margin-bottom: 10px; }
+  .progress-bar { height: 4px; background: #e0e0e0; border-radius: 2px; overflow: hidden; margin-top: 4px; }
+  .progress-fill { height: 100%; background: #1e3a5f; transition: width 0.3s; }
+  /* ── Crop ── */
+  .crop-region-item { display:flex; align-items:center; gap:8px; background:#fff3cd; border:1px solid #ffc107; border-radius:6px; padding:6px 10px; font-size:12px; }
+  .crop-num { background:#ffc107; color:#000; font-weight:700; width:20px; height:20px; border-radius:50%; display:flex; align-items:center; justify-content:center; flex-shrink:0; font-size:11px; }
+  .crop-region-item .remove { margin-left:auto; cursor:pointer; color:#999; font-size:16px; line-height:1; }
+  .crop-region-item .remove:hover { color:#dc2626; }
+
+  #toast { position: fixed; bottom: 18px; right: 18px; background: #1e3a5f; color: white; padding: 9px 16px; border-radius: 6px; font-size: 13px; z-index: 9999; opacity: 0; transition: opacity 0.25s; pointer-events: none; }
+  #toast.show { opacity: 1; }
+
+  /* ── Filter panel ── */
+  .filter-panel { flex-direction:column; gap:6px; margin-bottom:10px; padding:10px 12px; background:white; border-radius:6px; border:1px solid #e8e8e8; }
+  .filter-row { display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
+  .filter-panel select { padding:4px 8px; border:1px solid #ccc; border-radius:5px; font-size:12px; background:white; }
+  .filter-panel input[type=text] { flex:1; min-width:130px; padding:4px 8px; border:1px solid #ccc; border-radius:5px; font-size:12px; }
+  .filter-section-label { font-size:11px; color:#666; font-weight:600; white-space:nowrap; }
+  .filter-sep { color:#ddd; margin:0 2px; }
+  .filter-count { font-size:11px; color:#888; white-space:nowrap; margin-left:auto; }
+  .flt-tag { padding:3px 10px; border:1px solid #ccc; border-radius:12px; background:white; font-size:12px; cursor:pointer; transition:all 0.12s; white-space:nowrap; }
+  .flt-tag:hover { border-color:#1e3a5f; color:#1e3a5f; }
+  .flt-tag.active { background:#1e3a5f; color:white; border-color:#1e3a5f; font-weight:600; }
+  .flt-tag.flt-meta { border-style:dashed; }
+  .flt-tag.flt-meta.active { background:#8b5cf6; border-color:#8b5cf6; }
+  #filter-toggle-btn.filter-on { background:rgba(255,255,255,0.2); outline:1.5px solid rgba(255,255,255,0.5); outline-offset:1px; }
+
+  .device-group-board { display:flex; gap:8px; overflow-x:auto; padding-bottom:8px; }
+  .dg-column { flex:0 0 150px; background:#f8f9fa; border:1px solid #e8e8e8; border-radius:6px; min-height:220px; display:flex; flex-direction:column; transition:background 0.12s, border-color 0.12s; }
+  .dg-column.drag-over { background:#e8efff; border-color:#1e3a5f; }
+  .dg-col-header { font-size:11px; font-weight:700; color:#1e3a5f; padding:7px 8px; border-bottom:1px solid #e8e8e8; display:flex; justify-content:space-between; align-items:center; }
+  .dg-count { font-size:10px; color:#999; font-weight:400; }
+  .dg-col-body { flex:1; padding:6px; display:flex; flex-direction:column; gap:4px; min-height:160px; }
+  .dg-chip { background:white; border:1px solid #c8d8f0; border-radius:5px; padding:5px 8px; font-size:11px; cursor:grab; word-break:break-all; }
+  .dg-chip:active { cursor:grabbing; }
+  .rename-chip { display:inline-flex; align-items:center; gap:4px; background:#e8efff; border:1px solid #b8ccf0; border-radius:12px; padding:2px 8px; font-size:11px; }
+  .rename-chip .rm { cursor:pointer; color:#e53e3e; font-weight:700; line-height:1; padding-left:2px; }
+
+  /* ── Toggle button groups (carrier / contract) ── */
+  .toggle-group { display:flex; flex-wrap:wrap; gap:5px; }
+  .toggle-btn { padding:4px 10px; border:1px solid #ccc; border-radius:14px; background:white; font-size:12px; cursor:pointer; transition:all 0.12s; }
+  .toggle-btn:hover { border-color:#1e3a5f; color:#1e3a5f; }
+  .toggle-btn.selected { background:#1e3a5f; color:white; border-color:#1e3a5f; font-weight:600; }
+  /* contract types use a warm accent */
+  .toggle-btn.contract.selected { background:#b45309; border-color:#b45309; }
+
+  /* ── Export modal ── */
+  .export-modal { background:white; border-radius:10px; width:520px; max-height:90vh; display:flex; flex-direction:column; }
+  .export-preview-box { background:#f8f9fa; border:1px solid #e8e8e8; border-radius:6px; padding:10px 12px; }
+  .export-count-label { font-size:14px; font-weight:600; color:#1e3a5f; }
+  .export-name-sample { font-size:11px; color:#888; margin-top:4px; word-break:break-all; }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- Header -->
+  <header>
+    <h1>🔦 Lighthouse</h1>
+    <button class="btn btn-ghost btn-sm" onclick="openSettings('store')">⚙ 設定</button>
+    <button class="btn btn-ghost btn-sm" onclick="openExportModal()">📂 写真保存</button>
+    <button class="btn btn-ghost btn-sm" onclick="exportExcel()">⬇ Excel出力</button>
+    <span style="margin-left:auto"></span>
+    <button class="btn btn-ghost btn-sm" id="filter-toggle-btn" onclick="toggleFilterPanel()">🔍 絞り込み</button>
+    <span style="font-size:11px;opacity:0.75;margin-left:8px" id="header-user"></span>
+    <button class="btn btn-ghost btn-sm" onclick="doLogout()">ログアウト</button>
+    <span style="font-size:11px;opacity:0.65" id="header-info"></span>
+  </header>
+
+  <div class="main">
+
+    <!-- Sidebar -->
+    <div class="sidebar">
+      <div class="sidebar-section">
+        <h3>店舗一覧</h3>
+        <div id="store-list"></div>
+      </div>
+    </div>
+
+    <!-- Content -->
+    <div class="content">
+      <div class="toolbar">
+        <div class="drop-zone" id="drop-zone">
+          <span>📁 写真をここにドロップ、または</span>
+          <button class="btn btn-primary btn-sm" onclick="document.getElementById('file-input').click()">ファイル選択</button>
+          <input type="file" id="file-input" multiple accept="image/*" style="display:none" onchange="handleFileSelect(event)">
+        </div>
+        <button class="btn btn-success btn-sm" onclick="analyzeAll()">▶ 一括解析</button>
+      </div>
+      <div class="progress-wrap" id="progress-wrap" style="display:none">
+        <div style="font-size:12px;color:#555" id="progress-text">解析中...</div>
+        <div class="progress-bar"><div class="progress-fill" id="progress-fill" style="width:0%"></div></div>
+      </div>
+      <!-- Filter panel (toggled by header button) -->
+      <div class="filter-panel" id="filter-panel" style="display:none">
+        <!-- Row 1: dropdown filters + text search -->
+        <div class="filter-row">
+          <select id="flt-status" onchange="applyFilter()">
+            <option value="">全ステータス</option>
+            <option value="pending">未処理</option>
+            <option value="analyzing">解析中</option>
+            <option value="analyzed">解析済み</option>
+            <option value="confirmed">確認済み</option>
+            <option value="done">確定済み</option>
+            <option value="skip">対象外</option>
+            <option value="error">エラー</option>
+          </select>
+          <select id="flt-device" onchange="applyFilter()">
+            <option value="">全機種名</option>
+          </select>
+          <select id="flt-nondev-cat" onchange="applyFilter()">
+            <option value="">全区分（端末以外）</option>
+          </select>
+          <input type="text" id="flt-search" placeholder="ファイル名・端末・備考で検索" oninput="applyFilter()">
+          <button class="btn btn-outline btn-sm" onclick="clearFilter()">クリア</button>
+          <span class="filter-count" id="filter-count"></span>
+        </div>
+        <!-- Row 2: carrier + contract type toggles -->
+        <div class="filter-row">
+          <span class="filter-section-label">キャリア</span>
+          <button class="flt-tag" data-flt-carrier="ドコモ" onclick="toggleFltTag(this,'carrier')">ドコモ</button>
+          <button class="flt-tag" data-flt-carrier="au"     onclick="toggleFltTag(this,'carrier')">au</button>
+          <button class="flt-tag" data-flt-carrier="UQ"     onclick="toggleFltTag(this,'carrier')">UQ</button>
+          <button class="flt-tag" data-flt-carrier="SB"     onclick="toggleFltTag(this,'carrier')">SB</button>
+          <button class="flt-tag" data-flt-carrier="Y!"     onclick="toggleFltTag(this,'carrier')">Y!</button>
+          <button class="flt-tag" data-flt-carrier="楽天"   onclick="toggleFltTag(this,'carrier')">楽天</button>
+          <span class="filter-sep">│</span>
+          <span class="filter-section-label">契約種別</span>
+          <button class="flt-tag" data-flt-contract="MNP"    onclick="toggleFltTag(this,'contract')">MNP</button>
+          <button class="flt-tag" data-flt-contract="機種変更" onclick="toggleFltTag(this,'contract')">機種変更</button>
+          <button class="flt-tag" data-flt-contract="新規"    onclick="toggleFltTag(this,'contract')">新規</button>
+        </div>
+        <!-- Row 3: device group toggles -->
+        <div class="filter-row">
+          <span class="filter-section-label">グループ</span>
+          <button class="flt-tag flt-meta" data-flt-meta="iPhone"  onclick="toggleFltGroupMeta(this)">📱 iPhoneまとめて</button>
+          <button class="flt-tag flt-meta" data-flt-meta="Android" onclick="toggleFltGroupMeta(this)">🤖 Androidまとめて</button>
+          <span class="filter-sep">│</span>
+          <button class="flt-tag" data-flt-group="最新iPhone"          onclick="toggleFltTag(this,'group')">最新iPhone</button>
+          <button class="flt-tag" data-flt-group="主要Android"        onclick="toggleFltTag(this,'group')">主要Android</button>
+          <button class="flt-tag" data-flt-group="その他Android"      onclick="toggleFltTag(this,'group')">その他Android</button>
+          <button class="flt-tag" data-flt-group="廉価（国産）Android" onclick="toggleFltTag(this,'group')">廉価(国産)Android</button>
+          <button class="flt-tag" data-flt-group="廉価（中華）Android" onclick="toggleFltTag(this,'group')">廉価(中華)Android</button>
+          <button class="flt-tag" data-flt-group="中古iPhone"         onclick="toggleFltTag(this,'group')">中古iPhone</button>
+          <button class="flt-tag" data-flt-group="未振り分け"         onclick="toggleFltTag(this,'group')">未振り分け</button>
+        </div>
+      </div>
+
+      <div id="photo-grid" class="photo-grid"></div>
+      <div id="empty-state" class="empty-state">
+        <div style="font-size:36px;margin-bottom:8px">📷</div>
+        <div>左から店舗を選択し、写真をアップロードしてください</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ─── Photo detail modal ─────────────────────────────────────── -->
+<div class="overlay hidden" id="photo-modal">
+  <div class="photo-modal">
+    <div class="modal-header">
+      <h2 id="modal-title">写真詳細</h2>
+      <button class="btn btn-outline btn-sm" onclick="closePhotoModal()">✕ 閉じる</button>
+    </div>
+    <div class="modal-body">
+      <div class="image-area" id="image-area">
+        <img id="modal-img" src="" alt="">
+        <canvas id="crop-canvas" style="position:absolute;inset:0;width:100%;height:100%;display:none;cursor:crosshair"></canvas>
+        <div class="zoom-ctrl" id="zoom-ctrl">
+          <button class="btn btn-outline btn-sm" onclick="rotatePhoto(-90)" title="左90°回転（ファイル上書き）" style="font-size:15px;padding:3px 9px">↺</button>
+          <button class="btn btn-outline btn-sm" onclick="rotatePhoto(90)"  title="右90°回転（ファイル上書き）" style="font-size:15px;padding:3px 9px">↻</button>
+          <span style="color:rgba(255,255,255,0.35);font-size:11px">│</span>
+          <button class="btn btn-outline btn-sm" onclick="zoom(-0.25)">－</button>
+          <span class="zoom-label" id="zoom-label">100%</span>
+          <button class="btn btn-outline btn-sm" onclick="zoom(+0.25)">＋</button>
+          <button class="btn btn-outline btn-sm" onclick="resetZoom()">リセット</button>
+        </div>
+        <!-- Crop mode overlay UI -->
+        <div id="crop-hint" style="display:none;position:absolute;top:10px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.65);color:white;font-size:12px;padding:5px 14px;border-radius:14px;pointer-events:none;white-space:nowrap" id="crop-hint">
+          ドラッグで切り抜き範囲を選択（拡大可）
+        </div>
+      </div>
+      <!-- Crop mode panel (replaces form-panel in crop mode) -->
+      <div id="crop-panel" style="display:none;width:310px;padding:14px;overflow-y:auto;border-left:1px solid #eee;flex-direction:column;gap:10px">
+        <div style="font-size:13px;font-weight:600;color:#1e3a5f">✂ 切り分けモード</div>
+        <!-- サブモード切り替え -->
+        <div style="display:flex;gap:4px">
+          <button id="sub-btn-rect"  class="btn btn-sm btn-primary"  onclick="setCropSubMode('rect')" >矩形選択</button>
+          <button id="sub-btn-persp" class="btn btn-sm btn-outline"  onclick="setCropSubMode('persp')">4点補正</button>
+        </div>
+        <!-- 矩形モード -->
+        <div id="crop-rect-panel">
+          <div style="font-size:11px;color:#888;margin-bottom:4px">ドラッグで選択。ズーム拡大後に選択可。複数追加可。</div>
+          <div id="crop-region-list" style="display:flex;flex-direction:column;gap:6px"></div>
+        </div>
+        <!-- 4点補正モード -->
+        <div id="crop-persp-panel" style="display:none">
+          <div style="font-size:11px;color:#888;margin-bottom:6px">
+            POP の 4 隅を順にクリック<br>
+            <b>① 左上 → ② 右上 → ③ 右下 → ④ 左下</b><br>
+            ドラッグで位置調整可
+          </div>
+          <div id="persp-point-list" style="display:flex;flex-direction:column;gap:4px"></div>
+          <label style="display:flex;align-items:center;gap:7px;margin-top:10px;font-size:12px;cursor:pointer;user-select:none">
+            <input type="checkbox" id="persp-ratio-check" style="width:14px;height:14px;cursor:pointer"
+              onchange="document.getElementById('persp-ratio-note').style.display=this.checked?'':'none'">
+            <span>縦横比 <b>1.41:1</b> に補正</span>
+          </label>
+          <div id="persp-ratio-note" style="display:none;font-size:10px;color:#8b5cf6;margin-top:3px;margin-left:21px">
+            長辺÷短辺 = 1.41 になるようリサイズして保存します
+          </div>
+        </div>
+      </div>
+
+      <div class="form-panel" id="form-panel">
+        <div class="form-group">
+          <label>キャリア（複数選択可）</label>
+          <div class="toggle-group" id="carrier-group">
+            <button type="button" class="toggle-btn" data-carrier="ドコモ" onclick="toggleCarrier(this)">ドコモ</button>
+            <button type="button" class="toggle-btn" data-carrier="au"     onclick="toggleCarrier(this)">au</button>
+            <button type="button" class="toggle-btn" data-carrier="UQ"     onclick="toggleCarrier(this)">UQ</button>
+            <button type="button" class="toggle-btn" data-carrier="SB"     onclick="toggleCarrier(this)">SB</button>
+            <button type="button" class="toggle-btn" data-carrier="Y!"     onclick="toggleCarrier(this)">Y!</button>
+            <button type="button" class="toggle-btn" data-carrier="楽天"   onclick="toggleCarrier(this)">楽天</button>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>OCR候補（機種名）</label>
+          <div class="candidate-list" id="device-cands"></div>
+        </div>
+        <div class="form-group">
+          <label>機種名</label>
+          <select id="f-device" onchange="_onDeviceChange()"></select>
+        </div>
+        <div class="form-group" id="new-device-wrap" style="display:none">
+          <label>機種名（手入力）</label>
+          <input type="text" id="f-device-manual" placeholder="新機種名を入力">
+        </div>
+        <!-- 端末以外サブカテゴリ -->
+        <div class="form-group" id="non-device-wrap" style="display:none">
+          <label>端末以外の区分</label>
+          <select id="f-non-device-cat" onchange="updateRenamePreview()">
+            <option value="">— 選択 —</option>
+          </select>
+        </div>
+        <!-- 契約種別（端末選択時のみ表示） -->
+        <div class="form-group" id="contract-wrap" style="display:none">
+          <label>契約種別（複数選択可）</label>
+          <div class="toggle-group" id="contract-group">
+            <button type="button" class="toggle-btn contract" data-contract="MNP"    onclick="toggleContract(this)">MNP</button>
+            <button type="button" class="toggle-btn contract" data-contract="機種変更" onclick="toggleContract(this)">機種変更</button>
+            <button type="button" class="toggle-btn contract" data-contract="新規"    onclick="toggleContract(this)">新規</button>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>カテゴリ</label>
+          <select id="f-category">
+            <option value="">— 選択 —</option>
+            <option value="新品">新品</option>
+            <option value="中古">中古</option>
+            <option value="その他">その他</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>OCR候補（金額）</label>
+          <div class="candidate-list" id="price-cands"></div>
+        </div>
+        <div class="form-group">
+          <label>金額（円）</label>
+          <input type="text" id="f-price" placeholder="例: 87384" oninput="updateRenamePreview()">
+        </div>
+        <div class="form-group">
+          <label>備考</label>
+          <textarea id="f-note" rows="2" placeholder="任意メモ"></textarea>
+        </div>
+        <div class="form-group">
+          <label>OCR生テキスト</label>
+          <div class="raw-box" id="raw-box"></div>
+        </div>
+        <div class="form-group">
+          <label>リネーム後ファイル名</label>
+          <div id="rename-parts-list" style="display:none;flex-wrap:wrap;gap:4px;margin-bottom:6px"></div>
+          <div class="rename-preview" id="rename-preview"></div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer" id="normal-footer">
+      <button class="btn btn-outline btn-sm" onclick="enterCropMode()">✂ 切り分け</button>
+      <button class="btn btn-danger btn-sm" onclick="deletePhoto()" title="写真を削除（取り消し不可）">🗑 削除</button>
+      <span style="flex:1"></span>
+      <button class="btn btn-outline btn-sm" id="btn-skip" onclick="markSkip()" title="機種POPではない写真として除外">対象外</button>
+      <button class="btn btn-outline btn-sm" id="btn-unskip" style="display:none" onclick="markUnskip()">↩ 未処理に戻す</button>
+      <button class="btn btn-warning btn-sm" onclick="runAnalysis()">🔍 解析</button>
+      <button class="btn btn-outline btn-sm" onclick="savePhoto()">保存</button>
+      <button class="btn btn-primary btn-sm" onclick="addRenameSegment()">＋ 追加</button>
+      <button class="btn btn-success" onclick="confirmPhoto()">✓ 確定・リネーム</button>
+    </div>
+    <div class="modal-footer hidden" id="crop-footer">
+      <span style="font-size:12px;color:#555;margin-right:auto" id="crop-count-label">範囲: 0件</span>
+      <button class="btn btn-outline btn-sm" onclick="clearCropRegions()">全消去</button>
+      <button class="btn btn-outline btn-sm" onclick="exitCropMode()">キャンセル</button>
+      <button class="btn btn-danger btn-sm" id="crop-exec-btn" onclick="executeCrop()" disabled>✂ 切り分け実行</button>
+    </div>
+  </div>
+</div>
+
+<!-- ─── Settings modal ─────────────────────────────────────────── -->
+<div class="overlay hidden" id="settings-modal">
+  <div class="settings-modal">
+    <div class="modal-header">
+      <h2>設定</h2>
+      <button class="btn btn-outline btn-sm" onclick="closeSettings()">✕ 閉じる</button>
+    </div>
+    <div class="settings-tabs">
+      <button class="tab-btn active" onclick="switchTab('store')">店舗インポート</button>
+      <button class="tab-btn" onclick="switchTab('candidates')">機種候補</button>
+      <button class="tab-btn" onclick="switchTab('groups')">端末グループ</button>
+      <button class="tab-btn" onclick="switchTab('data')">データ管理</button>
+      <button class="tab-btn" onclick="switchTab('users')">ユーザー管理</button>
+    </div>
+
+    <!-- Tab: Store import -->
+    <div class="tab-content active" id="tab-store">
+      <p class="hint">1行に「【店舗コード】店舗名」の形式（タブ区切り）で貼り付けてください。<br>カンマ区切り「コード,店舗名」も使用可能です。</p>
+      <textarea class="import-area" id="store-import-text"
+        placeholder="【DS01】	ドコモショップ池袋サンシャイン通り店&#10;【au01】	au style 新宿店（直営）&#10;【SB01】	ソフトバンク六本木店（直営）"></textarea>
+      <div style="margin-top:10px;display:flex;gap:8px;justify-content:flex-end">
+        <button class="btn btn-outline btn-sm" onclick="closeSettings()">キャンセル</button>
+        <button class="btn btn-primary btn-sm" onclick="doStoreImport()">インポート実行</button>
+      </div>
+    </div>
+
+    <!-- Tab: Device candidates -->
+    <div class="tab-content" id="tab-candidates">
+      <!-- 機種候補 -->
+      <div style="margin-bottom:12px;display:flex;gap:8px;align-items:flex-end">
+        <div style="flex:1">
+          <label style="font-size:11px;color:#666;display:block;margin-bottom:3px">機種名を追加</label>
+          <input type="text" id="new-cand-name" placeholder="例: iPhone17Pro_256GB" style="width:100%;padding:6px 9px;border:1px solid #ccc;border-radius:5px;font-size:13px">
+        </div>
+        <div>
+          <label style="font-size:11px;color:#666;display:block;margin-bottom:3px">カテゴリ</label>
+          <select id="new-cand-cat" style="padding:6px 9px;border:1px solid #ccc;border-radius:5px;font-size:13px">
+            <option value="新品">新品</option>
+            <option value="中古">中古</option>
+            <option value="その他">その他</option>
+          </select>
+        </div>
+        <button class="btn btn-primary btn-sm" onclick="addCandidateDevice()" style="align-self:flex-end">追加</button>
+      </div>
+      <div id="candidates-view"></div>
+
+      <!-- 端末以外の区分 -->
+      <div style="margin-top:20px;padding-top:14px;border-top:1px solid #eee">
+        <div style="font-size:12px;font-weight:700;color:#1e3a5f;margin-bottom:8px">端末以外の区分</div>
+        <div style="display:flex;gap:8px;margin-bottom:10px">
+          <input type="text" id="new-nondev-cat" placeholder="例: 料金プランPOP" style="flex:1;padding:6px 9px;border:1px solid #ccc;border-radius:5px;font-size:13px">
+          <button class="btn btn-primary btn-sm" onclick="addNonDeviceCategory()">追加</button>
+        </div>
+        <div id="nondev-cat-view"></div>
+      </div>
+
+      <!-- リネームタグ（1:1対応） -->
+      <div style="margin-top:20px;padding-top:14px;border-top:1px solid #eee">
+        <div style="font-size:12px;font-weight:700;color:#1e3a5f;margin-bottom:4px">リネームタグ（1:1対応）</div>
+        <div style="font-size:11px;color:#888;margin-bottom:10px">価格あり＋機種名が一致する場合に使うタグ名です。一致しない機種はiPhone→POPI、Android→POPAになります。</div>
+        <div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap;align-items:center">
+          <input type="text" id="new-rtag-device" placeholder="機種名（例: iPhone17_256GB）" style="flex:2;min-width:140px;padding:6px 9px;border:1px solid #ccc;border-radius:5px;font-size:12px">
+          <span style="color:#aaa;font-size:12px">→</span>
+          <input type="text" id="new-rtag-tag" placeholder="タグ（例: 割引POP（I17））" style="flex:2;min-width:140px;padding:6px 9px;border:1px solid #ccc;border-radius:5px;font-size:12px">
+          <button class="btn btn-primary btn-sm" onclick="addRenameTag()">追加・更新</button>
+        </div>
+        <div id="rename-tag-view"></div>
+      </div>
+    </div>
+
+    <!-- Tab: Device groups -->
+    <div class="tab-content" id="tab-groups">
+      <p class="hint">端末名をドラッグして各グループへ移動できます。「端末以外の区分」に登録されている項目はここには表示されません。</p>
+      <div class="device-group-board" id="device-group-board"></div>
+    </div>
+
+    <!-- Tab: Data management -->
+    <div class="tab-content" id="tab-data">
+      <div style="display:flex;flex-direction:column;gap:16px">
+
+        <div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:12px 14px;font-size:13px;color:#7f1d1d;line-height:1.75">
+          ⚠ <b>全件削除</b>は取り消せません。<br>
+          登録済みの全店舗・全写真ファイル・全OCR解析結果が完全に削除されます。<br>
+          実行前に必ず下記の確認を行ってください。
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <label style="display:flex;align-items:flex-start;gap:10px;font-size:13px;cursor:pointer">
+            <input type="checkbox" id="allDel-check1" style="margin-top:2px;width:15px;height:15px;cursor:pointer;flex-shrink:0" onchange="onAllDelCheckChange()">
+            <span>すべての写真の保存（📂 写真保存）が完了しており、必要なファイルはエクスポート済みである</span>
+          </label>
+          <label style="display:flex;align-items:flex-start;gap:10px;font-size:13px;cursor:pointer">
+            <input type="checkbox" id="allDel-check2" style="margin-top:2px;width:15px;height:15px;cursor:pointer;flex-shrink:0" onchange="onAllDelCheckChange()">
+            <span>Excel出力（⬇ Excel出力）が完了しており、解析データはすべて書き出し済みである</span>
+          </label>
+        </div>
+
+        <div class="form-group">
+          <label style="color:#7f1d1d;font-weight:600">確認のため「全件削除」と入力してください</label>
+          <input type="text" id="allDel-confirm-input" placeholder="全件削除" oninput="onAllDelCheckChange()"
+            style="border-color:#fca5a5">
+        </div>
+
+        <button class="btn btn-danger" id="allDel-exec-btn" onclick="doAllDelete()" disabled
+          style="align-self:flex-start">
+          🗑 全店舗・全写真データを削除する
+        </button>
+      </div>
+    </div>
+
+    <!-- Tab: User management -->
+    <div class="tab-content" id="tab-users">
+      <div style="margin-bottom:14px">
+        <div style="font-size:12px;font-weight:700;color:#1e3a5f;margin-bottom:8px">ユーザー追加</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <input type="text" id="new-user-name" placeholder="ユーザー名"
+            style="flex:1;min-width:100px;padding:6px 9px;border:1px solid #ccc;border-radius:5px;font-size:13px">
+          <input type="password" id="new-user-pass" placeholder="パスワード（6文字以上）"
+            style="flex:1;min-width:140px;padding:6px 9px;border:1px solid #ccc;border-radius:5px;font-size:13px">
+          <button class="btn btn-primary btn-sm" onclick="addUser()">追加</button>
+        </div>
+      </div>
+      <div style="font-size:11px;color:#888;margin-bottom:10px">ログイン中のユーザーは削除できません。</div>
+      <div id="users-list" style="display:flex;flex-direction:column;gap:6px"></div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ─── Export modal ────────────────────────────────────────────── -->
+<div class="overlay hidden" id="export-modal">
+  <div class="export-modal">
+    <div class="modal-header">
+      <h2>📂 写真保存 / エクスポート</h2>
+      <button class="btn btn-outline btn-sm" onclick="closeExportModal()">✕ 閉じる</button>
+    </div>
+    <div style="padding:16px;display:flex;flex-direction:column;gap:14px;overflow-y:auto">
+
+      <!-- 保存種別 -->
+      <div class="form-group">
+        <label>保存種別</label>
+        <select id="exp-mode" onchange="onExportModeChange()">
+          <option value="store">確定済み写真 — 店舗別</option>
+          <option value="device">確定済み写真 — 端末別</option>
+          <option value="unprocessed">未処理写真（対象外・未解析をまとめて保存）</option>
+        </select>
+      </div>
+
+      <!-- 店舗フィルター（store / unprocessed モード） -->
+      <div class="form-group" id="exp-store-wrap">
+        <label>対象店舗</label>
+        <select id="exp-store" onchange="refreshExportCount()">
+          <option value="">全店舗</option>
+        </select>
+      </div>
+
+      <!-- 端末フィルター（device モード） -->
+      <div class="form-group" id="exp-device-wrap" style="display:none">
+        <label>対象端末</label>
+        <select id="exp-device" onchange="refreshExportCount()">
+          <option value="">全端末</option>
+        </select>
+      </div>
+
+      <!-- 保存先フォルダ -->
+      <div class="form-group">
+        <label>保存先フォルダ（サーバPC上のパス）</label>
+        <input type="text" id="exp-dest" placeholder="例: C:\Users\yuuze\Desktop\export" oninput="refreshExportCount()">
+        <div style="font-size:11px;color:#888;margin-top:3px">フォルダが存在しない場合は自動作成します</div>
+      </div>
+
+      <!-- プレビュー -->
+      <div class="export-preview-box">
+        <div class="export-count-label" id="exp-count-label">— 件数を確認してください</div>
+        <div class="export-name-sample" id="exp-name-sample"></div>
+      </div>
+
+      <!-- ファイル名フォーマット説明 -->
+      <div style="font-size:11px;color:#888;background:#f0f4ff;border-radius:5px;padding:8px 10px;line-height:1.7">
+        <b>確定済みファイル名の形式：</b><br>
+        【店舗コード】店舗名 備考(機種名).拡張子<br>
+        例: <span style="font-family:monospace">【量販06】ビックカメラ 柏店 d割引POP(I17).jpg</span><br>
+        同名ファイルが存在する場合は <code>(2)</code>, <code>(3)</code>… を付加します
+      </div>
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn btn-outline btn-sm" onclick="closeExportModal()">キャンセル</button>
+      <button class="btn btn-primary" id="exp-exec-btn" onclick="doExport()" disabled>⬇ 保存実行</button>
+    </div>
+  </div>
+</div>
+
+<!-- ─── Store delete confirmation modal ────────────────────────────────── -->
+<div class="overlay hidden" id="store-delete-modal">
+  <div class="store-del-modal">
+    <div class="modal-header">
+      <h2>⚠ 店舗データを削除</h2>
+      <button class="btn btn-outline btn-sm" onclick="closeStoreDeleteModal()">✕ 閉じる</button>
+    </div>
+    <div style="padding:16px;display:flex;flex-direction:column;gap:14px">
+      <div id="store-del-name" style="font-size:14px;font-weight:600;color:#1e3a5f;word-break:break-all"></div>
+      <div class="sdel-warning">
+        ⚠ この操作は<b>取り消せません</b>。<br>
+        店舗に紐づく写真ファイル・OCR解析結果・確定データがすべて完全に削除されます。<br>
+        削除を実行する前に、下記の確認を必ず行ってください。
+      </div>
+      <div class="sdel-checklist">
+        <label class="sdel-check-label">
+          <input type="checkbox" id="sdel-check1" onchange="onStoreDelCheckChange()">
+          <span>写真の保存（📂 写真保存）が完了しており、必要なファイルはすべてエクスポート済みである</span>
+        </label>
+        <label class="sdel-check-label">
+          <input type="checkbox" id="sdel-check2" onchange="onStoreDelCheckChange()">
+          <span>Excel出力（⬇ Excel出力）が完了しており、解析データはすべて書き出し済みである</span>
+        </label>
+      </div>
+      <div id="store-del-count" style="font-size:12px;color:#888"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline btn-sm" onclick="closeStoreDeleteModal()">キャンセル</button>
+      <button class="btn btn-danger" id="sdel-exec-btn" onclick="doStoreDelete()" disabled>🗑 すべて削除する</button>
+    </div>
+  </div>
+</div>
+
+<!-- ─── Login / Setup modal ──────────────────────────────────────── -->
+<div class="overlay" id="login-modal" style="background:rgba(0,0,0,0.82);z-index:200">
+  <div style="background:white;border-radius:14px;width:360px;padding:36px 32px;display:flex;flex-direction:column;gap:18px">
+    <div style="text-align:center">
+      <div style="font-size:36px;margin-bottom:6px">🔦</div>
+      <h2 style="font-size:22px;font-weight:700;color:#1e3a5f;letter-spacing:0.5px">Lighthouse</h2>
+      <p id="login-subtitle" style="font-size:13px;color:#888;margin-top:5px">ログインしてください</p>
+    </div>
+    <div>
+      <label style="font-size:11px;color:#666;display:block;margin-bottom:3px">ユーザー名</label>
+      <input type="text" id="login-username" autocomplete="username"
+        style="width:100%;padding:9px 12px;border:1px solid #ccc;border-radius:6px;font-size:14px"
+        placeholder="ユーザー名">
+    </div>
+    <div>
+      <label style="font-size:11px;color:#666;display:block;margin-bottom:3px">パスワード</label>
+      <input type="password" id="login-password" autocomplete="current-password"
+        style="width:100%;padding:9px 12px;border:1px solid #ccc;border-radius:6px;font-size:14px"
+        placeholder="パスワード"
+        onkeydown="if(event.key==='Enter')_loginSubmit()">
+    </div>
+    <div id="login-confirm-wrap" style="display:none">
+      <label style="font-size:11px;color:#666;display:block;margin-bottom:3px">パスワード（確認）</label>
+      <input type="password" id="login-password-confirm"
+        style="width:100%;padding:9px 12px;border:1px solid #ccc;border-radius:6px;font-size:14px"
+        placeholder="パスワードを再入力">
+    </div>
+    <div id="login-error" style="display:none;color:#dc2626;font-size:12px;background:#fef2f2;padding:8px 10px;border-radius:5px"></div>
+    <button class="btn btn-primary" onclick="_loginSubmit()" id="login-btn" style="padding:10px">ログイン</button>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ── State ──────────────────────────────────────────────────────────────────
+const API = '';
+let authToken = null;
+let currentUsername = null;
+let _loginMode = 'login';   // 'login' | 'setup'
+
+let stores = [];
+let photos = [];
+let candidates = { devices: {} };
+let currentStoreId = null;
+let currentPhotoId = null;
+let zoomScale = 1;
+let panX = 0, panY = 0;
+let isPanning = false, panStartX = 0, panStartY = 0, didPan = false;
+
+// ── Auth ───────────────────────────────────────────────────────────────────
+async function initAuth() {
+  authToken = localStorage.getItem('lighthouse_token');
+  if (authToken) {
+    try {
+      const me = await apiFetch('/api/auth/me');
+      currentUsername = me.username;
+      document.getElementById('header-user').textContent = me.username;
+      document.getElementById('login-modal').classList.add('hidden');
+      await init();
+      return;
+    } catch {
+      authToken = null;
+      localStorage.removeItem('lighthouse_token');
+    }
+  }
+  // Determine login vs initial setup
+  const status = await fetch('/api/auth/needs-setup').then(r => r.json()).catch(() => ({ needs_setup: false }));
+  _showLoginModal(status.needs_setup ? 'setup' : 'login');
+}
+
+function _showLoginModal(mode = _loginMode) {
+  _loginMode = mode;
+  const isSetup = mode === 'setup';
+  document.getElementById('login-modal').classList.remove('hidden');
+  document.getElementById('login-subtitle').textContent = isSetup ? '初回セットアップ：管理者アカウントを作成してください' : 'ログインしてください';
+  document.getElementById('login-btn').textContent = isSetup ? 'アカウントを作成' : 'ログイン';
+  document.getElementById('login-confirm-wrap').style.display = isSetup ? '' : 'none';
+  document.getElementById('login-error').style.display = 'none';
+  document.getElementById('login-username').value = '';
+  document.getElementById('login-password').value = '';
+  if (document.getElementById('login-password-confirm')) document.getElementById('login-password-confirm').value = '';
+}
+
+async function _loginSubmit() {
+  const username = document.getElementById('login-username').value.trim();
+  const password = document.getElementById('login-password').value;
+  const errEl    = document.getElementById('login-error');
+  const btn      = document.getElementById('login-btn');
+
+  errEl.style.display = 'none';
+  if (!username || !password) {
+    errEl.textContent = 'ユーザー名とパスワードを入力してください';
+    errEl.style.display = 'block'; return;
+  }
+  if (_loginMode === 'setup') {
+    const confirm = document.getElementById('login-password-confirm').value;
+    if (password !== confirm) {
+      errEl.textContent = 'パスワードが一致しません';
+      errEl.style.display = 'block'; return;
+    }
+    if (password.length < 6) {
+      errEl.textContent = 'パスワードは6文字以上必要です';
+      errEl.style.display = 'block'; return;
+    }
+  }
+
+  btn.disabled = true;
+  btn.textContent = '処理中...';
+  try {
+    const endpoint = _loginMode === 'setup' ? '/api/auth/setup' : '/api/auth/login';
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: 'エラーが発生しました' }));
+      throw new Error(err.detail || 'エラー');
+    }
+    const data = await res.json();
+    authToken = data.token;
+    currentUsername = data.username;
+    localStorage.setItem('lighthouse_token', authToken);
+    document.getElementById('header-user').textContent = currentUsername;
+    document.getElementById('login-modal').classList.add('hidden');
+    await init();
+  } catch (e) {
+    errEl.textContent = e.message;
+    errEl.style.display = 'block';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = _loginMode === 'setup' ? 'アカウントを作成' : 'ログイン';
+  }
+}
+
+function doLogout() {
+  authToken = null; currentUsername = null;
+  localStorage.removeItem('lighthouse_token');
+  document.getElementById('header-user').textContent = '';
+  _showLoginModal('login');
+}
+
+// ── User management ────────────────────────────────────────────────────────
+async function renderUsersView() {
+  const users = await apiFetch('/api/users').catch(() => []);
+  const el = document.getElementById('users-list');
+  if (!users.length) { el.innerHTML = '<div style="color:#888;font-size:12px">ユーザーなし</div>'; return; }
+  el.innerHTML = users.map(u => `
+    <div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:#f8f9fa;border-radius:6px">
+      <span style="flex:1;font-size:13px;font-weight:600">${_esc(u.username)}</span>
+      <span style="font-size:11px;color:#aaa">${(u.created_at || '').slice(0, 16)}</span>
+      ${u.username !== currentUsername
+        ? `<button class="btn btn-danger btn-sm" onclick="deleteUser(${JSON.stringify(u.username)})">削除</button>`
+        : '<span style="font-size:11px;color:#1e3a5f;font-weight:600">（ログイン中）</span>'}
+    </div>`).join('');
+}
+
+async function addUser() {
+  const name = document.getElementById('new-user-name').value.trim();
+  const pass = document.getElementById('new-user-pass').value;
+  if (!name || pass.length < 6) { toast('ユーザー名と6文字以上のパスワードを入力してください'); return; }
+  try {
+    await apiFetch('/api/users', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: name, password: pass }),
+    });
+    document.getElementById('new-user-name').value = '';
+    document.getElementById('new-user-pass').value = '';
+    toast('ユーザーを追加しました: ' + name);
+    renderUsersView();
+  } catch (e) { toast('エラー: ' + e.message); }
+}
+
+async function deleteUser(username) {
+  if (!confirm(`「${username}」を削除しますか？`)) return;
+  try {
+    await apiFetch(`/api/users/${encodeURIComponent(username)}`, { method: 'DELETE' });
+    toast('削除しました: ' + username);
+    renderUsersView();
+  } catch (e) { toast('エラー: ' + e.message); }
+}
+
+// ── Init ───────────────────────────────────────────────────────────────────
+async function init() {
+  await Promise.all([loadStores(), loadCandidates()]);
+}
+
+async function loadStores() {
+  stores = await apiFetch('/api/stores');
+  renderStoreList();
+}
+
+async function loadCandidates() {
+  candidates = await apiFetch('/api/candidates');
+  rebuildDeviceSelect();
+  rebuildNonDeviceCatSelect();
+  if (document.getElementById('tab-candidates').classList.contains('active')) {
+    renderCandidatesView();
+    renderNonDeviceCatView();
+    renderRenameTagView();
+  }
+  if (document.getElementById('tab-groups').classList.contains('active')) {
+    renderDeviceGroupBoard();
+  }
+}
+
+async function loadPhotos(storeId) {
+  const url = filterPanelOpen
+    ? '/api/photos'
+    : (storeId ? `/api/photos?store_id=${storeId}` : '/api/photos');
+  photos = await apiFetch(url);
+  renderPhotoGrid();
+}
+
+async function apiFetch(path, opts = {}) {
+  opts.headers = opts.headers || {};
+  if (authToken) opts.headers['Authorization'] = `Bearer ${authToken}`;
+  const res = await fetch(API + path, opts);
+  if (res.status === 401) {
+    authToken = null; currentUsername = null;
+    localStorage.removeItem('lighthouse_token');
+    _showLoginModal();
+    throw new Error('認証が必要です');
+  }
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+// ── Store list ─────────────────────────────────────────────────────────────
+function renderStoreList() {
+  const el = document.getElementById('store-list');
+  if (!stores.length) {
+    el.innerHTML = '<div style="font-size:12px;color:#bbb;padding:6px">店舗未登録<br>設定→インポート</div>';
+    return;
+  }
+  el.innerHTML = stores.map(s => `
+    <div class="store-item ${currentStoreId === s.id ? 'active' : ''}" onclick="selectStore(${s.id})">
+      <span class="store-code-tag">${s.code || '—'}</span>
+      <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px">${_esc(s.name)}</span>
+      <span class="store-del-btn" onclick="event.stopPropagation();openStoreDeleteModal(${s.id})" title="店舗を削除">🗑</span>
+    </div>
+  `).join('');
+}
+
+function selectStore(id) {
+  currentStoreId = id;
+  renderStoreList();
+  loadPhotos(id);
+}
+
+// ── Store delete ───────────────────────────────────────────────────────────
+let _storeDelId = null;
+
+function openStoreDeleteModal(storeId) {
+  const store = stores.find(s => s.id === storeId);
+  if (!store) return;
+  _storeDelId = storeId;
+  document.getElementById('sdel-check1').checked = false;
+  document.getElementById('sdel-check2').checked = false;
+  document.getElementById('sdel-exec-btn').disabled = true;
+  const code = store.code ? `【${store.code}】` : '';
+  document.getElementById('store-del-name').textContent = code + store.name;
+  const countEl = document.getElementById('store-del-count');
+  if (currentStoreId === storeId && photos.length) {
+    countEl.textContent = `対象写真: ${photos.length}枚（切り分けファイル含む）`;
+  } else {
+    countEl.textContent = '';
+  }
+  document.getElementById('store-delete-modal').classList.remove('hidden');
+}
+
+function closeStoreDeleteModal() {
+  document.getElementById('store-delete-modal').classList.add('hidden');
+  _storeDelId = null;
+}
+
+function onStoreDelCheckChange() {
+  const ok = document.getElementById('sdel-check1').checked &&
+             document.getElementById('sdel-check2').checked;
+  document.getElementById('sdel-exec-btn').disabled = !ok;
+}
+
+async function doStoreDelete() {
+  if (!_storeDelId) return;
+  const btn = document.getElementById('sdel-exec-btn');
+  btn.disabled = true; btn.textContent = '削除中...';
+  try {
+    const data = await apiFetch(`/api/stores/${_storeDelId}`, { method: 'DELETE' });
+    closeStoreDeleteModal();
+    toast(`🗑 削除完了: ${data.deleted_photos}枚の写真を削除しました`);
+    if (currentStoreId === _storeDelId) {
+      currentStoreId = null;
+      photos = [];
+      renderPhotoGrid();
+    }
+    await loadStores();
+  } catch (err) {
+    toast('削除エラー: ' + err.message);
+    btn.disabled = false; btn.textContent = '🗑 すべて削除する';
+  }
+}
+
+// ── Filter state ───────────────────────────────────────────────────────────
+let filterStatus = '', filterDevice = '', filterNonDevCat = '', filterSearch = '';
+let filterCarriers  = [];   // OR match against photo.carriers
+let filterContracts = [];   // OR match against photo.contract_types
+let filterGroups    = [];   // OR match against the device's group
+let _renameParts   = [];   // accumulated tag segments for multi-tag rename
+let filterPanelOpen = false;
+
+const GROUP_META = {
+  'iPhone':  ['最新iPhone', '中古iPhone'],
+  'Android': ['主要Android', 'その他Android', '廉価（国産）Android', '廉価（中華）Android'],
+};
+
+function _deviceGroup(p) {
+  if (p.non_device_category) return null;
+  if (!p.device_name) return null;
+  return (candidates.device_groups || {})[p.device_name] || '未振り分け';
+}
+
+function _filteredPhotos() {
+  return photos.filter(p => {
+    if (filterStatus    && p.status !== filterStatus)         return false;
+    if (filterDevice    && p.device_name !== filterDevice)    return false;
+    if (filterNonDevCat && p.non_device_category !== filterNonDevCat) return false;
+    if (filterCarriers.length  && !filterCarriers.some(c  => (p.carriers       || []).includes(c)))  return false;
+    if (filterContracts.length && !filterContracts.some(c => (p.contract_types || []).includes(c))) return false;
+    if (filterGroups.length) {
+      const g = _deviceGroup(p);
+      if (!g || !filterGroups.includes(g)) return false;
+    }
+    if (filterSearch) {
+      const q = filterSearch.toLowerCase();
+      if (!p.original_filename.toLowerCase().includes(q) &&
+          !(p.device_name         || '').toLowerCase().includes(q) &&
+          !(p.non_device_category || '').toLowerCase().includes(q) &&
+          !(p.note                || '').toLowerCase().includes(q) &&
+          !(p.renamed_filename    || '').toLowerCase().includes(q)) return false;
+    }
+    return true;
+  });
+}
+
+function _refreshFilterDeviceList() {
+  const sel = document.getElementById('flt-device');
+  if (!sel) return;
+  const devices = [...new Set(photos.map(p => p.device_name).filter(Boolean))].sort();
+  const prev = sel.value;
+  sel.innerHTML = '<option value="">全機種名</option>' +
+    devices.map(d => `<option value="${_esc(d)}"${d === prev ? ' selected' : ''}>${_esc(d)}</option>`).join('');
+}
+
+function _refreshFltNonDevCat() {
+  const sel = document.getElementById('flt-nondev-cat');
+  if (!sel) return;
+  const cats = [...new Set(photos.map(p => p.non_device_category).filter(Boolean))].sort();
+  const prev = sel.value;
+  sel.innerHTML = '<option value="">全区分（端末以外）</option>' +
+    cats.map(c => `<option value="${_esc(c)}"${c === prev ? ' selected' : ''}>${_esc(c)}</option>`).join('');
+}
+
+function toggleFltTag(btn, type) {
+  btn.classList.toggle('active');
+  if (type === 'carrier') {
+    filterCarriers  = [...document.querySelectorAll('[data-flt-carrier].active')].map(b => b.dataset.fltCarrier);
+  } else if (type === 'contract') {
+    filterContracts = [...document.querySelectorAll('[data-flt-contract].active')].map(b => b.dataset.fltContract);
+  } else if (type === 'group') {
+    filterGroups = [...document.querySelectorAll('[data-flt-group].active')].map(b => b.dataset.fltGroup);
+  }
+  _renderFilteredGrid();
+  _updateFilterBadge();
+}
+
+function toggleFltGroupMeta(btn) {
+  const targets = GROUP_META[btn.dataset.fltMeta] || [];
+  const turningOn = !btn.classList.contains('active');
+  btn.classList.toggle('active');
+  targets.forEach(g => {
+    const tagBtn = document.querySelector(`[data-flt-group="${CSS.escape(g)}"]`);
+    if (tagBtn) tagBtn.classList.toggle('active', turningOn);
+  });
+  filterGroups = [...document.querySelectorAll('[data-flt-group].active')].map(b => b.dataset.fltGroup);
+  _renderFilteredGrid();
+  _updateFilterBadge();
+}
+
+async function toggleFilterPanel() {
+  filterPanelOpen = !filterPanelOpen;
+  if (!filterPanelOpen) clearFilter();
+  await loadPhotos(currentStoreId);
+  _applyFilterPanelVisibility();
+  _updateFilterBadge();
+}
+
+function _applyFilterPanelVisibility() {
+  document.getElementById('filter-panel').style.display =
+    (filterPanelOpen && photos.length) ? 'flex' : 'none';
+}
+
+function _updateFilterBadge() {
+  const active = filterStatus || filterDevice || filterNonDevCat || filterSearch ||
+                 filterCarriers.length || filterContracts.length || filterGroups.length;
+  const btn = document.getElementById('filter-toggle-btn');
+  btn.textContent = active ? '🔍 絞り込み中' : '🔍 絞り込み';
+  btn.classList.toggle('filter-on', filterPanelOpen || !!active);
+}
+
+function applyFilter() {
+  filterStatus    = document.getElementById('flt-status').value;
+  filterDevice    = document.getElementById('flt-device').value;
+  filterNonDevCat = document.getElementById('flt-nondev-cat').value;
+  filterSearch    = document.getElementById('flt-search').value;
+  _renderFilteredGrid();
+  _updateFilterBadge();
+}
+
+function clearFilter() {
+  filterStatus = ''; filterDevice = ''; filterNonDevCat = ''; filterSearch = '';
+  filterCarriers = []; filterContracts = []; filterGroups = [];
+  document.getElementById('flt-status').value    = '';
+  document.getElementById('flt-device').value    = '';
+  document.getElementById('flt-nondev-cat').value = '';
+  document.getElementById('flt-search').value    = '';
+  document.querySelectorAll('.flt-tag.active').forEach(b => b.classList.remove('active'));
+  _renderFilteredGrid();
+  _updateFilterBadge();
+}
+
+// ── Photo grid ─────────────────────────────────────────────────────────────
+function _esc(s) { return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
+
+function _fmtPrice(v) {
+  if (!v) return '';
+  const n = Number(String(v).replace(/[,，\s]/g, ''));
+  return isNaN(n) ? `¥${v}` : `¥${n.toLocaleString()}`;
+}
+
+const STATUS_ORDER = { pending:0, skip:1, error:2, analyzing:3, analyzed:4, confirmed:5, done:6 };
+
+function _renderFilteredGrid() {
+  const grid    = document.getElementById('photo-grid');
+  const empty   = document.getElementById('empty-state');
+  const countEl = document.getElementById('filter-count');
+  const filtered = _filteredPhotos()
+    .slice()
+    .sort((a, b) => (STATUS_ORDER[a.status] ?? 99) - (STATUS_ORDER[b.status] ?? 99));
+
+  if (countEl) {
+    countEl.textContent = photos.length === filtered.length
+      ? `${photos.length}枚`
+      : `${filtered.length} / ${photos.length}枚`;
+  }
+
+  if (!photos.length) {
+    grid.innerHTML = ''; empty.style.display = ''; return;
+  }
+  empty.style.display = 'none';
+
+  if (!filtered.length) {
+    grid.innerHTML = '<div style="color:#bbb;text-align:center;padding:40px;grid-column:1/-1">絞り込み条件に一致する写真がありません</div>';
+    return;
+  }
+
+  grid.innerHTML = filtered.map(p => `
+    <div class="photo-card status-${p.status}" onclick="openPhotoModal(${p.id})">
+      <img class="photo-thumb" src="${API}/uploads/${p.stored_filename}" alt="" loading="lazy">
+      <div class="photo-info">
+        ${filterPanelOpen && p.store_code ? `<div style="font-size:9px;color:#7a9cc8;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:1px">[${_esc(p.store_code)}] ${_esc(p.store_name||'')}</div>` : ''}
+        <div class="photo-name" title="${_esc(p.renamed_filename || p.original_filename)}">${_esc(p.renamed_filename || p.original_filename)}</div>
+        <div class="photo-device">${_esc(p.device_name || p.non_device_category || '')}</div>
+        <div class="photo-price">${_fmtPrice(p.price)}</div>
+        <span class="status-chip chip-${p.status}">${statusLabel(p.status)}</span>
+      </div>
+    </div>
+  `).join('');
+}
+
+function renderPhotoGrid() {
+  _refreshFilterDeviceList();
+  _refreshFltNonDevCat();
+  _applyFilterPanelVisibility();
+  _renderFilteredGrid();
+}
+
+function statusLabel(s) {
+  return { pending: '未処理', analyzing: '解析中…', analyzed: '解析済', confirmed: '確認済', done: '完了', skip: '解析対象外', error: 'エラー' }[s] || s;
+}
+
+// ── Upload ─────────────────────────────────────────────────────────────────
+const dropZone = document.getElementById('drop-zone');
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault(); dropZone.classList.remove('drag-over');
+  uploadFiles([...e.dataTransfer.files]);
+});
+function handleFileSelect(e) { uploadFiles([...e.target.files]); e.target.value = ''; }
+
+async function uploadFiles(files) {
+  if (!currentStoreId) { toast('店舗を選択してください'); return; }
+  const imgs = files.filter(f => f.type.startsWith('image/'));
+  if (!imgs.length) { toast('画像ファイルを選択してください'); return; }
+  const fd = new FormData();
+  imgs.forEach(f => fd.append('files', f));
+  fd.append('store_id', currentStoreId);
+  const data = await apiFetch('/api/photos/upload', { method: 'POST', body: fd });
+  toast(`${data.uploaded}枚アップロード完了`);
+  loadPhotos(currentStoreId);
+}
+
+// ── Batch analyze ──────────────────────────────────────────────────────────
+async function analyzeAll() {
+  const pending = photos.filter(p => p.status === 'pending');
+  if (!pending.length) { toast('解析待ちの写真がありません'); return; }
+
+  // 全件をまとめてキューへ（サーバー側で順番に処理）
+  await Promise.all(pending.map(p =>
+    fetch(`${API}/api/photos/${p.id}/analyze`, { method: 'POST' }).catch(() => {})
+  ));
+  toast(`${pending.length}枚をバックグラウンド解析キューに追加しました`);
+  await loadPhotos(currentStoreId);
+  startPolling();
+}
+
+// ── Device select ──────────────────────────────────────────────────────────
+function rebuildDeviceSelect() {
+  const sel = document.getElementById('f-device');
+  const prev = sel.value;
+  sel.innerHTML = '<option value="__non_device__">端末以外</option><option value="__manual__">✏ 手入力...</option><option value="">— 選択なし —</option>';
+
+  const allDevices = [...new Set(Object.values(candidates.devices || {}).flat())].sort();
+  const groupMap   = candidates.device_groups || {};
+
+  // group → sorted device list
+  const byGroup = {};
+  DEVICE_GROUPS.forEach(g => { byGroup[g] = []; });
+  allDevices.forEach(d => {
+    const g = groupMap[d] || '未振り分け';
+    (byGroup[g] = byGroup[g] || []).push(d);
+  });
+
+  DEVICE_GROUPS.forEach(g => {
+    const devs = byGroup[g];
+    if (!devs || !devs.length) return;
+    const og = document.createElement('optgroup');
+    og.label = g;
+    devs.forEach(d => {
+      const opt = document.createElement('option');
+      opt.value = d; opt.textContent = d;
+      og.appendChild(opt);
+    });
+    sel.appendChild(og);
+  });
+
+  sel.value = prev || '';
+}
+
+function _onDeviceChange() {
+  const val = document.getElementById('f-device').value;
+  document.getElementById('new-device-wrap').style.display = val === '__manual__'     ? '' : 'none';
+  document.getElementById('non-device-wrap').style.display = val === '__non_device__' ? '' : 'none';
+  const hasDevice = val && val !== '__non_device__';
+  document.getElementById('contract-wrap').style.display   = hasDevice ? '' : 'none';
+  if (!hasDevice) setContracts([]);
+  if (val !== '__non_device__') document.getElementById('f-non-device-cat').value = '';
+  updateRenamePreview();
+}
+
+function getDeviceName() {
+  const sel = document.getElementById('f-device');
+  if (sel.value === '__manual__')     return document.getElementById('f-device-manual').value.trim() || null;
+  if (sel.value === '__non_device__') return null;
+  return sel.value || null;
+}
+
+// ── Carrier buttons ────────────────────────────────────────────────────────
+function toggleCarrier(btn)  { btn.classList.toggle('selected'); updateRenamePreview(); }
+function toggleContract(btn) { btn.classList.toggle('selected'); updateRenamePreview(); }
+
+function getSelectedCarriers() {
+  return [...document.querySelectorAll('#carrier-group .toggle-btn.selected')].map(b => b.dataset.carrier);
+}
+function setCarriers(carriers) {
+  document.querySelectorAll('#carrier-group .toggle-btn').forEach(b =>
+    b.classList.toggle('selected', carriers.includes(b.dataset.carrier)));
+}
+
+function getSelectedContracts() {
+  return [...document.querySelectorAll('#contract-group .toggle-btn.selected')].map(b => b.dataset.contract);
+}
+function setContracts(contracts) {
+  document.querySelectorAll('#contract-group .toggle-btn').forEach(b =>
+    b.classList.toggle('selected', contracts.includes(b.dataset.contract)));
+}
+
+// ── Photo modal ────────────────────────────────────────────────────────────
+async function openPhotoModal(photoId) {
+  currentPhotoId = photoId;
+  _renameParts = [];
+  const chipEl = document.getElementById('rename-parts-list');
+  if (chipEl) { chipEl.innerHTML = ''; chipEl.style.display = 'none'; }
+  const photo = photos.find(p => p.id === photoId);
+  if (!photo) return;
+
+  document.getElementById('photo-modal').classList.remove('hidden');
+  document.getElementById('modal-title').textContent = photo.original_filename;
+  const img = document.getElementById('modal-img');
+  img.src = `${API}/uploads/${photo.stored_filename}`;
+  zoomScale = 1; panX = 0; panY = 0;
+  applyTransform();
+
+  // Populate saved values
+  if (photo.non_device_category) {
+    document.getElementById('f-device').value = '__non_device__';
+    document.getElementById('f-non-device-cat').value = photo.non_device_category;
+  } else {
+    document.getElementById('f-device').value = photo.device_name || '';
+    document.getElementById('f-non-device-cat').value = '';
+  }
+  document.getElementById('f-device-manual').value = '';
+  _onDeviceChange();
+  document.getElementById('f-category').value = photo.device_category || '';
+  setCarriers(photo.carriers || []);
+  setContracts(photo.contract_types || []);
+  document.getElementById('f-price').value = photo.price || '';
+  document.getElementById('f-note').value = photo.note || '';
+  document.getElementById('rename-preview').textContent = photo.renamed_filename || '';
+  document.getElementById('device-cands').innerHTML = '';
+  document.getElementById('price-cands').innerHTML = '';
+  document.getElementById('raw-box').textContent = '';
+
+  // skip ボタン表示切り替え
+  const isSkip = photo.status === 'skip';
+  document.getElementById('btn-skip').style.display   = isSkip ? 'none' : '';
+  document.getElementById('btn-unskip').style.display = isSkip ? '' : 'none';
+
+  // 解析済みなら保存済みOCR結果を即表示
+  if (['analyzed', 'confirmed', 'done'].includes(photo.status)) {
+    const ocr = await apiFetch(`/api/photos/${photoId}/ocr-result`);
+    if (ocr.found) displayOcrResult(ocr);
+  } else if (photo.status === 'analyzing') {
+    document.getElementById('raw-box').textContent = '解析中… 完了後に自動更新されます';
+  }
+}
+
+function closePhotoModal() {
+  document.getElementById('photo-modal').classList.add('hidden');
+  currentPhotoId = null;
+  loadPhotos(currentStoreId);
+}
+
+function displayOcrResult(data) {
+  document.getElementById('raw-box').textContent = data.raw_text || '（テキストなし）';
+
+  const dEl = document.getElementById('device-cands');
+  if (data.device_candidates?.length) {
+    dEl.innerHTML = data.device_candidates.map(c => `
+      <div class="cand-chip" onclick="selectDevice('${c.name.replace(/'/g,"\\'")}','${(c.category||'').replace(/'/g,"\\'")}')">
+        <span>${c.name} <small style="color:#999">${c.category||''}</small></span>
+        <span class="cand-score">${Math.round(c.score * 100)}%</span>
+      </div>`).join('');
+    if (!document.getElementById('f-device').value)
+      selectDevice(data.device_candidates[0].name, data.device_candidates[0].category);
+  } else {
+    dEl.innerHTML = '<div style="font-size:11px;color:#bbb">候補なし</div>';
+  }
+
+  const pEl = document.getElementById('price-cands');
+  if (data.price_candidates?.length) {
+    pEl.innerHTML = data.price_candidates.map(p => `
+      <div class="cand-chip" onclick="document.getElementById('f-price').value='${p}'">
+        <span>${_fmtPrice(p)}</span>
+      </div>`).join('');
+    if (!document.getElementById('f-price').value)
+      document.getElementById('f-price').value = data.price_candidates[0];
+  } else {
+    pEl.innerHTML = '<div style="font-size:11px;color:#bbb">候補なし</div>';
+  }
+}
+
+async function deletePhoto() {
+  if (!currentPhotoId) return;
+  const photo = photos.find(p => p.id === currentPhotoId);
+  const name  = photo?.original_filename || `ID:${currentPhotoId}`;
+  const hasChildren = photos.some(p => p.id !== currentPhotoId &&
+    (photo?.id && p.original_filename.startsWith(photo.original_filename.replace(/\.[^.]+$/, ''))));
+
+  const msg = `「${name}」を削除しますか？\nこの操作は取り消せません。`
+    + (hasChildren ? '\n（この写真から切り分けたファイルも削除されます）' : '');
+  if (!confirm(msg)) return;
+
+  try {
+    const data = await apiFetch(`/api/photos/${currentPhotoId}`, { method: 'DELETE' });
+    const extra = data.deleted > 1 ? `（切り分けファイル含む ${data.deleted}件）` : '';
+    toast(`🗑 削除しました${extra}`);
+    closePhotoModal();
+  } catch (err) {
+    toast('削除エラー: ' + err.message);
+  }
+}
+
+async function markSkip() {
+  if (!currentPhotoId) return;
+  await apiFetch(`/api/photos/${currentPhotoId}/skip`, { method: 'POST' });
+  document.getElementById('btn-skip').style.display = 'none';
+  document.getElementById('btn-unskip').style.display = '';
+  toast('対象外にしました');
+  await loadPhotos(currentStoreId);
+}
+
+async function markUnskip() {
+  if (!currentPhotoId) return;
+  await apiFetch(`/api/photos/${currentPhotoId}/unskip`, { method: 'POST' });
+  document.getElementById('btn-skip').style.display = '';
+  document.getElementById('btn-unskip').style.display = 'none';
+  toast('未処理に戻しました');
+  await loadPhotos(currentStoreId);
+}
+
+async function runAnalysis() {
+  if (!currentPhotoId) return;
+  document.getElementById('raw-box').textContent = '解析キューに追加しました…';
+  document.getElementById('device-cands').innerHTML = '';
+  document.getElementById('price-cands').innerHTML = '';
+
+  await apiFetch(`/api/photos/${currentPhotoId}/analyze`, { method: 'POST' });
+  toast('解析を開始しました。完了すると自動更新されます');
+  await loadPhotos(currentStoreId);
+  startPolling();
+}
+
+function selectDevice(name, category) {
+  const sel = document.getElementById('f-device');
+  let found = false;
+  for (const opt of sel.options) {
+    if (opt.value === name) { sel.value = name; found = true; break; }
+  }
+  if (!found) {
+    sel.value = '__manual__';
+    document.getElementById('f-device-manual').value = name;
+  }
+  document.getElementById('f-category').value = category || '';
+  _onDeviceChange();
+}
+
+async function savePhoto() {
+  if (!currentPhotoId) return;
+  const deviceName = getDeviceName();
+  const body = {
+    device_name: deviceName,
+    device_category: document.getElementById('f-category').value || null,
+    carriers: getSelectedCarriers(),
+    contract_types: getSelectedContracts(),
+    non_device_category: document.getElementById('f-non-device-cat').value || null,
+    price: document.getElementById('f-price').value.replace(/[,，\s]/g, '') || null,
+    note: document.getElementById('f-note').value || null,
+  };
+  await apiFetch(`/api/photos/${currentPhotoId}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  // Reload candidates in case a new device was auto-registered
+  await loadCandidates();
+  toast('保存しました');
+}
+
+async function confirmPhoto() {
+  await savePhoto();
+  const body = {};
+  if (_renameParts.length) {
+    const prefix = _storePrefix();
+    const parts  = _renameParts.join(' ');
+    const sfx    = getSelectedContracts().includes('新規') ? ' 新規契約あり' : '';
+    body.renamed_filename = `${prefix} ${parts}${sfx}`.trim();
+  }
+  const data = await apiFetch(`/api/photos/${currentPhotoId}/confirm`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  _renameParts = [];
+  document.getElementById('rename-parts-list').style.display = 'none';
+  document.getElementById('rename-preview').textContent = data.renamed_filename || '';
+  toast('確定: ' + (data.renamed_filename || ''));
+}
+
+// ── Zoom ───────────────────────────────────────────────────────────────────
+function applyTransform() {
+  const img = document.getElementById('modal-img');
+  const area = document.getElementById('image-area');
+  img.style.transform = `translate(${panX}px, ${panY}px) scale(${zoomScale})`;
+  document.getElementById('zoom-label').textContent = Math.round(zoomScale * 100) + '%';
+  area.classList.toggle('zoomable', zoomScale > 1);
+}
+
+function zoom(delta) {
+  zoomScale = Math.max(0.25, Math.min(4, zoomScale + delta));
+  if (zoomScale <= 1) { panX = 0; panY = 0; }
+  applyTransform();
+}
+
+function resetZoom() {
+  zoomScale = 1; panX = 0; panY = 0;
+  applyTransform();
+}
+
+async function rotatePhoto(degrees) {
+  if (!currentPhotoId) return;
+  const label = degrees > 0 ? '右' : '左';
+  try {
+    await apiFetch(`/api/photos/${currentPhotoId}/rotate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ degrees })
+    });
+    // キャッシュバスターを付けて画像を再読み込み
+    const img = document.getElementById('modal-img');
+    const base = img.src.split('?')[0];
+    img.src = `${base}?v=${Date.now()}`;
+    toast(`${label}90°回転しました`);
+    // グリッドのサムネイルも更新
+    loadPhotos(currentStoreId);
+  } catch (err) {
+    toast('回転エラー: ' + err.message);
+  }
+}
+
+// Pan handlers on the image-area container
+const _area = document.getElementById('image-area');
+_area.addEventListener('mousedown', e => {
+  if (zoomScale <= 1) return;
+  isPanning = true; didPan = false;
+  panStartX = e.clientX - panX;
+  panStartY = e.clientY - panY;
+  _area.classList.add('panning');
+  e.preventDefault();
+});
+window.addEventListener('mousemove', e => {
+  if (!isPanning) return;
+  const dx = e.clientX - panStartX, dy = e.clientY - panStartY;
+  if (Math.abs(dx - panX) > 3 || Math.abs(dy - panY) > 3) didPan = true;
+  panX = dx; panY = dy;
+  document.getElementById('modal-img').style.transform = `translate(${panX}px,${panY}px) scale(${zoomScale})`;
+});
+window.addEventListener('mouseup', () => {
+  if (!isPanning) return;
+  isPanning = false;
+  _area.classList.remove('panning');
+});
+// Click on area to zoom in (only if not panning)
+_area.addEventListener('click', e => {
+  if (didPan) { didPan = false; return; }
+  if (e.target === document.getElementById('modal-img')) zoom(+0.25);
+});
+
+// ── Settings modal ─────────────────────────────────────────────────────────
+function openSettings(tab = 'store') {
+  document.getElementById('settings-modal').classList.remove('hidden');
+  switchTab(tab);
+  if (tab === 'candidates') renderCandidatesView();
+}
+
+function closeSettings() {
+  document.getElementById('settings-modal').classList.add('hidden');
+}
+
+function switchTab(name) {
+  document.querySelectorAll('.tab-btn').forEach((b, i) => {
+    b.classList.toggle('active', ['store', 'candidates', 'groups', 'data', 'users'][i] === name);
+  });
+  document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  if (name === 'candidates') { renderCandidatesView(); renderNonDeviceCatView(); renderRenameTagView(); }
+  if (name === 'groups') { renderDeviceGroupBoard(); }
+  if (name === 'users') { renderUsersView(); }
+  if (name === 'data') {
+    document.getElementById('allDel-check1').checked = false;
+    document.getElementById('allDel-check2').checked = false;
+    document.getElementById('allDel-confirm-input').value = '';
+    document.getElementById('allDel-exec-btn').disabled = true;
+  }
+}
+
+// ── All-data delete ────────────────────────────────────────────────────────
+function onAllDelCheckChange() {
+  const c1   = document.getElementById('allDel-check1').checked;
+  const c2   = document.getElementById('allDel-check2').checked;
+  const word = document.getElementById('allDel-confirm-input').value.trim();
+  document.getElementById('allDel-exec-btn').disabled = !(c1 && c2 && word === '全件削除');
+}
+
+async function doAllDelete() {
+  const btn = document.getElementById('allDel-exec-btn');
+  btn.disabled = true; btn.textContent = '削除中...';
+  try {
+    const data = await apiFetch('/api/all-data', { method: 'DELETE' });
+    closeSettings();
+    currentStoreId = null;
+    photos = [];
+    stores = [];
+    renderStoreList();
+    renderPhotoGrid();
+    toast(`🗑 全件削除完了: ${data.deleted_photos}枚の写真を削除しました`);
+  } catch (err) {
+    toast('削除エラー: ' + err.message);
+    btn.disabled = false; btn.textContent = '🗑 全店舗・全写真データを削除する';
+  }
+}
+
+// ── Store import ───────────────────────────────────────────────────────────
+async function doStoreImport() {
+  const text = document.getElementById('store-import-text').value.trim();
+  if (!text) return;
+  const data = await apiFetch('/api/stores/import', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text })
+  });
+  toast(`${data.imported}件の店舗をインポートしました`);
+  closeSettings();
+  await loadStores();
+}
+
+// ── Candidates management ──────────────────────────────────────────────────
+function renderCandidatesView() {
+  const el = document.getElementById('candidates-view');
+  const cats = candidates.devices || {};
+  if (!Object.keys(cats).length) {
+    el.innerHTML = '<div style="color:#bbb;font-size:13px">機種候補がありません</div>';
+    return;
+  }
+  el.innerHTML = Object.entries(cats).map(([cat, devices]) => `
+    <div class="cat-block">
+      <div class="cat-header">
+        <span class="cat-name">${cat}</span>
+        <span style="font-size:11px;color:#999">${devices.length}件</span>
+      </div>
+      <div class="device-tags">
+        ${devices.map(d => `
+          <div class="device-tag">
+            <span>${d}</span>
+            <span class="remove" onclick="removeCandidate('${d.replace(/'/g,"\\'")}','${cat.replace(/'/g,"\\'")}')">×</span>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `).join('');
+}
+
+async function addCandidateDevice() {
+  const name = document.getElementById('new-cand-name').value.trim();
+  const cat  = document.getElementById('new-cand-cat').value;
+  if (!name) { toast('機種名を入力してください'); return; }
+  await apiFetch('/api/candidates/device', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, category: cat })
+  });
+  document.getElementById('new-cand-name').value = '';
+  await loadCandidates();
+  toast('追加しました: ' + name);
+}
+
+// ── Non-device categories ───────────────────────────────────────────────────
+function rebuildNonDeviceCatSelect() {
+  const sel  = document.getElementById('f-non-device-cat');
+  const prev = sel.value;
+  const cats = candidates.non_device_categories || [];
+  sel.innerHTML = '<option value="">— 選択 —</option>' +
+    cats.map(c => `<option value="${_esc(c)}">${_esc(c)}</option>`).join('');
+  if (cats.includes(prev)) sel.value = prev;
+}
+
+function renderNonDeviceCatView() {
+  const el   = document.getElementById('nondev-cat-view');
+  const cats = candidates.non_device_categories || [];
+  if (!cats.length) {
+    el.innerHTML = '<div style="color:#bbb;font-size:13px">区分が登録されていません</div>';
+    return;
+  }
+  el.innerHTML = `<div class="device-tags">${
+    cats.map(c => `
+      <div class="device-tag">
+        <span>${_esc(c)}</span>
+        <span class="remove" onclick="removeNonDeviceCategory('${c.replace(/'/g,"\\'")}')">×</span>
+      </div>`).join('')
+  }</div>`;
+}
+
+async function addNonDeviceCategory() {
+  const name = document.getElementById('new-nondev-cat').value.trim();
+  if (!name) { toast('区分名を入力してください'); return; }
+  await apiFetch('/api/candidates/non-device-category', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name })
+  });
+  document.getElementById('new-nondev-cat').value = '';
+  await loadCandidates();
+  toast('追加しました: ' + name);
+}
+
+async function removeNonDeviceCategory(name) {
+  if (!confirm(`「${name}」を削除しますか？`)) return;
+  await apiFetch('/api/candidates/non-device-category', {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name })
+  });
+  await loadCandidates();
+  toast('削除しました: ' + name);
+}
+
+// ── Rename tags (1:1 mapping) ─────────────────────────────────────────────────
+function renderRenameTagView() {
+  const el = document.getElementById('rename-tag-view');
+  if (!el) return;
+  const tags = candidates.rename_tags || {};
+  const entries = Object.entries(tags).sort((a, b) => a[0].localeCompare(b[0], 'ja'));
+  if (!entries.length) {
+    el.innerHTML = '<div style="color:#bbb;font-size:12px">登録なし</div>';
+    return;
+  }
+  el.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:12px">
+    <thead><tr>
+      <th style="text-align:left;padding:5px 8px;background:#f5f5f5;border:1px solid #e8e8e8;white-space:nowrap">機種名</th>
+      <th style="text-align:left;padding:5px 8px;background:#f5f5f5;border:1px solid #e8e8e8">タグ</th>
+      <th style="padding:5px;background:#f5f5f5;border:1px solid #e8e8e8"></th>
+    </tr></thead>
+    <tbody>${entries.map(([d, t]) => `
+      <tr>
+        <td style="padding:4px 8px;border:1px solid #e8e8e8;white-space:nowrap">${_esc(d)}</td>
+        <td style="padding:4px 8px;border:1px solid #e8e8e8;color:#1e3a5f;font-weight:600">${_esc(t)}</td>
+        <td style="padding:4px 6px;border:1px solid #e8e8e8;text-align:center">
+          <span style="cursor:pointer;color:#e53e3e;font-size:14px;line-height:1" onclick="removeRenameTag('${d.replace(/\\/g,'\\\\').replace(/'/g,"\\'")}')">×</span>
+        </td>
+      </tr>`).join('')}
+    </tbody></table>`;
+}
+
+async function addRenameTag() {
+  const device = document.getElementById('new-rtag-device').value.trim();
+  const tag    = document.getElementById('new-rtag-tag').value.trim();
+  if (!device || !tag) { toast('機種名とタグを両方入力してください'); return; }
+  await apiFetch('/api/candidates/rename-tag', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ device, tag })
+  });
+  document.getElementById('new-rtag-device').value = '';
+  document.getElementById('new-rtag-tag').value    = '';
+  await loadCandidates();
+  toast('追加しました: ' + device);
+}
+
+async function removeRenameTag(device) {
+  if (!confirm(`「${device}」のリネームタグを削除しますか？`)) return;
+  await apiFetch('/api/candidates/rename-tag', {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ device })
+  });
+  await loadCandidates();
+  toast('削除しました: ' + device);
+}
+
+// ── Live rename preview ───────────────────────────────────────────────────────
+const _CARRIER_ORDER_P = ['ドコモ', 'au', 'SB', 'UQ', 'Y!', '楽天'];
+const _CARRIER_SYM_P   = {'ドコモ':'d','au':'au','SB':'SB','UQ':'UQ','Y!':'Y!','楽天':'楽天'};
+
+function _storePrefix() {
+  const store = stores.find(s => s.id === currentStoreId);
+  const code  = store?.code || '';
+  const name  = store?.name || '';
+  return code ? `【${code}】${name}` : name;
+}
+
+function _computeTagSeg() {
+  // Returns just the carrier+tag part (no store prefix, no 新規) for current form state
+  const devVal    = document.getElementById('f-device')?.value || '';
+  const nonDevCat = document.getElementById('f-non-device-cat')?.value || '';
+  const manualDev = document.getElementById('f-device-manual')?.value?.trim() || '';
+  const device    = devVal === '__non_device__' ? '' :
+                    devVal === '__manual__'     ? manualDev : devVal;
+  const price     = (document.getElementById('f-price')?.value || '').replace(/[,，\s]/g, '');
+  const carriers  = getSelectedCarriers();
+
+  const renameTags   = candidates.rename_tags   || {};
+  const deviceGroups = candidates.device_groups || {};
+
+  let tag = '';
+  if (nonDevCat) {
+    tag = `POP(${nonDevCat})`;
+  } else if (device) {
+    if (price && renameTags[device]) {
+      tag = renameTags[device];
+    } else {
+      const grp = deviceGroups[device] || '未振り分け';
+      if (grp.includes('iPhone')) {
+        tag = grp === '中古iPhone' ? '中古端末割引POPI' : 'POPI';
+      } else if (grp === '廉価（中華）Android') {
+        tag = '割引POP中華A';
+      } else {
+        tag = 'POPA';
+      }
+    }
+  }
+  if (!tag) return '';
+  const parts = carriers.length
+    ? _CARRIER_ORDER_P.filter(c => carriers.includes(c)).map(c => `${_CARRIER_SYM_P[c]}${tag}`)
+    : [tag];
+  return parts.join(' ');
+}
+
+function _buildRenamePreview() {
+  const prefix = _storePrefix();
+  const seg    = _computeTagSeg();
+  if (!seg) return prefix;
+  const body = getSelectedContracts().includes('新規') ? `${seg} 新規契約あり` : seg;
+  return prefix ? `${prefix} ${body}` : body;
+}
+
+function _refreshRenameDisplay() {
+  // Chips
+  const chipEl = document.getElementById('rename-parts-list');
+  if (chipEl) {
+    chipEl.style.display = _renameParts.length ? 'flex' : 'none';
+    chipEl.innerHTML = _renameParts.map((p, i) =>
+      `<div class="rename-chip"><span>${_esc(p)}</span><span class="rm" onclick="removeRenamePart(${i})">×</span></div>`
+    ).join('');
+  }
+  // Preview text
+  const el = document.getElementById('rename-preview');
+  if (!el) return;
+  const prefix = _storePrefix();
+  const body   = _renameParts.join(' ');
+  const suffix = (_renameParts.length && getSelectedContracts().includes('新規')) ? ' 新規契約あり' : '';
+  el.textContent = body ? `${prefix} ${body}${suffix}` : prefix;
+}
+
+function updateRenamePreview() {
+  if (_renameParts.length) {
+    _refreshRenameDisplay();
+  } else {
+    const el = document.getElementById('rename-preview');
+    if (el && currentPhotoId) el.textContent = _buildRenamePreview();
+  }
+}
+
+function addRenameSegment() {
+  const seg = _computeTagSeg();
+  if (!seg) { toast('機種名またはキャリアを選択してください'); return; }
+  _renameParts.push(seg);
+  _refreshRenameDisplay();
+}
+
+function removeRenamePart(idx) {
+  _renameParts.splice(idx, 1);
+  if (_renameParts.length) {
+    _refreshRenameDisplay();
+  } else {
+    document.getElementById('rename-parts-list').style.display = 'none';
+    updateRenamePreview();
+  }
+}
+
+// ── Device groups (drag & drop) ──────────────────────────────────────────────
+const DEVICE_GROUPS = ['最新iPhone', '主要Android', 'その他Android', '廉価（国産）Android', '廉価（中華）Android', '中古iPhone', '未振り分け'];
+let _dgDragName = null;
+
+function renderDeviceGroupBoard() {
+  const board = document.getElementById('device-group-board');
+  if (!board) return;
+  const allDevices = [...new Set(Object.values(candidates.devices || {}).flat())].sort();
+  const groupMap = candidates.device_groups || {};
+
+  board.innerHTML = DEVICE_GROUPS.map(g => {
+    const members = allDevices.filter(d => (groupMap[d] || '未振り分け') === g);
+    return `
+      <div class="dg-column" data-group="${_esc(g)}"
+           ondragover="event.preventDefault();this.classList.add('drag-over')"
+           ondragleave="this.classList.remove('drag-over')"
+           ondrop="onDeviceGroupDrop(event,'${g.replace(/'/g,"\\'")}')">
+        <div class="dg-col-header"><span>${_esc(g)}</span><span class="dg-count">${members.length}</span></div>
+        <div class="dg-col-body">
+          ${members.map(d => `
+            <div class="dg-chip" draggable="true"
+                 ondragstart="onDeviceGroupDragStart(event,'${d.replace(/'/g,"\\'")}')">${_esc(d)}</div>
+          `).join('')}
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function onDeviceGroupDragStart(e, name) {
+  _dgDragName = name;
+  e.dataTransfer.effectAllowed = 'move';
+}
+
+async function onDeviceGroupDrop(e, group) {
+  e.preventDefault();
+  e.currentTarget.classList.remove('drag-over');
+  if (!_dgDragName) return;
+  await apiFetch('/api/candidates/device-group', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ device: _dgDragName, group })
+  });
+  _dgDragName = null;
+  await loadCandidates();
+  renderDeviceGroupBoard();
+}
+
+async function removeCandidate(name, category) {
+  if (!confirm(`「${name}」を削除しますか？`)) return;
+  await apiFetch('/api/candidates/device', {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, category })
+  });
+  await loadCandidates();
+  toast('削除しました: ' + name);
+}
+
+// ── Export modal (file copy) ────────────────────────────────────────────────
+async function openExportModal() {
+  // 店舗ドロップダウン
+  const storeSel = document.getElementById('exp-store');
+  storeSel.innerHTML = '<option value="">全店舗</option>' +
+    stores.map(s => `<option value="${s.id}">【${_esc(s.code)}】${_esc(s.name)}</option>`).join('');
+
+  // 端末ドロップダウン（全写真から取得）
+  let devices = [];
+  try { devices = await apiFetch('/api/devices'); } catch {}
+  const devSel = document.getElementById('exp-device');
+  devSel.innerHTML = '<option value="">全端末</option>' +
+    devices.map(d => `<option value="${_esc(d)}">${_esc(d)}</option>`).join('');
+
+  document.getElementById('export-modal').classList.remove('hidden');
+  document.getElementById('exp-mode').value = 'store';
+  document.getElementById('exp-dest').value = '';
+  document.getElementById('exp-exec-btn').disabled = true;
+  onExportModeChange();
+}
+
+function closeExportModal() {
+  document.getElementById('export-modal').classList.add('hidden');
+}
+
+function onExportModeChange() {
+  const mode = document.getElementById('exp-mode').value;
+  document.getElementById('exp-store-wrap').style.display  = mode === 'device' ? 'none' : '';
+  document.getElementById('exp-device-wrap').style.display = mode === 'device' ? '' : 'none';
+  refreshExportCount();
+}
+
+async function refreshExportCount() {
+  const mode    = document.getElementById('exp-mode').value;
+  const storeId = document.getElementById('exp-store').value;
+  const devVal  = document.getElementById('exp-device').value;
+  const dest    = document.getElementById('exp-dest').value.trim();
+
+  let url = `/api/export/count?mode=${mode}`;
+  if (storeId && mode !== 'device') url += `&store_id=${storeId}`;
+  if (devVal  && mode === 'device') url += `&device_name=${encodeURIComponent(devVal)}`;
+
+  const labelEl  = document.getElementById('exp-count-label');
+  const sampleEl = document.getElementById('exp-name-sample');
+  const execBtn  = document.getElementById('exp-exec-btn');
+
+  try {
+    const data = await apiFetch(url);
+    const modeLabel = { store: '確定済み（店舗別）', device: '確定済み（端末別）', unprocessed: '未処理写真' }[mode];
+    labelEl.textContent = `${modeLabel}: ${data.count} 枚が保存対象`;
+    execBtn.disabled = data.count === 0 || !dest;
+
+    if (mode !== 'unprocessed') {
+      sampleEl.textContent = '保存先: ' + (dest || '（パスを入力してください）');
+    } else {
+      sampleEl.textContent = 'pending / skip / error ステータスの写真を元ファイル名で保存します';
+    }
+  } catch (e) {
+    labelEl.textContent = '件数取得エラー: ' + e.message;
+    execBtn.disabled = true;
+  }
+}
+
+async function doExport() {
+  const mode    = document.getElementById('exp-mode').value;
+  const storeId = document.getElementById('exp-store').value;
+  const devVal  = document.getElementById('exp-device').value;
+  const dest    = document.getElementById('exp-dest').value.trim();
+
+  if (!dest) { toast('保存先フォルダを入力してください'); return; }
+
+  const btn = document.getElementById('exp-exec-btn');
+  btn.disabled = true; btn.textContent = '保存中...';
+
+  try {
+    const endpoint = mode === 'unprocessed'
+      ? '/api/export/unprocessed'
+      : '/api/export/confirmed';
+
+    const body = { dest_folder: dest };
+    if (storeId && mode !== 'device')  body.store_id    = Number(storeId);
+    if (devVal  && mode === 'device')  body.device_name = devVal;
+
+    const data = await apiFetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+
+    const skippedMsg = data.skipped ? ` (${data.skipped}枚スキップ)` : '';
+    toast(`✅ ${data.copied}枚を保存しました${skippedMsg}`);
+    document.getElementById('exp-count-label').textContent =
+      `完了: ${data.copied}枚 → ${data.dest}`;
+    closeExportModal();
+  } catch (err) {
+    toast('エラー: ' + err.message);
+  } finally {
+    btn.disabled = false; btn.textContent = '⬇ 保存実行';
+  }
+}
+
+// ── Export Excel ────────────────────────────────────────────────────────────
+async function exportExcel() {
+  const url = API + (currentStoreId ? `/api/export?store_id=${currentStoreId}` : '/api/export');
+  const res = await fetch(url);
+  const blob = await res.blob();
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `photos_${new Date().toISOString().slice(0,10)}.xlsx`;
+  a.click();
+}
+
+// ── Polling ────────────────────────────────────────────────────────────────
+let _pollTimer = null;
+
+function startPolling() {
+  if (_pollTimer) return;
+  _pollTimer = setInterval(async () => {
+    const url = filterPanelOpen
+      ? '/api/photos'
+      : (currentStoreId ? `/api/photos?store_id=${currentStoreId}` : '/api/photos');
+    let fresh;
+    try { fresh = await apiFetch(url); } catch { return; }
+
+    // 完了・対象外・エラーになったものを通知
+    fresh.forEach(fp => {
+      const old = photos.find(p => p.id === fp.id);
+      if (old?.status === 'analyzing') {
+        if (fp.status === 'analyzed') toast(`✅ 解析完了: ${fp.original_filename}`);
+        if (fp.status === 'skip')     toast(`⏭ 対象外: ${fp.original_filename}`);
+        if (fp.status === 'error')    toast(`❌ 解析エラー: ${fp.original_filename}`);
+      }
+    });
+
+    photos = fresh;
+    renderPhotoGrid();
+
+    // 解析中の写真がなくなったらポーリング停止
+    if (!fresh.some(p => p.status === 'analyzing')) {
+      clearInterval(_pollTimer);
+      _pollTimer = null;
+    }
+
+    // モーダルが開いていて対象写真が解析完了したら結果を自動表示
+    if (currentPhotoId) {
+      const cur = fresh.find(p => p.id === currentPhotoId);
+      if (cur?.status === 'analyzed') {
+        const ocr = await apiFetch(`/api/photos/${currentPhotoId}/ocr-result`);
+        if (ocr.found) displayOcrResult(ocr);
+      }
+    }
+  }, 3000);
+}
+
+// ── Crop mode ──────────────────────────────────────────────────────────────
+let cropMode    = false;
+let cropSubMode = 'rect';          // 'rect' | 'persp'
+
+// 矩形モード用
+let cropRegions    = [];           // [{x,y,w,h} 画像ピクセル座標]
+let cropDraft      = null;
+let cropMouseStart = null;
+
+// 4点補正モード用
+let perspPoints  = [];             // [{x,y} 画像ピクセル座標] 最大4点
+let perspDragIdx = -1;             // ドラッグ中の点インデックス
+
+const cropCanvas = document.getElementById('crop-canvas');
+const cropCtx    = cropCanvas.getContext('2d');
+
+// ── 座標変換 ──────────────────────────────────────────────────────────────
+
+/**
+ * ズーム・パン・object-fit:contain を考慮した画像表示領域を返す。
+ * getBoundingClientRect() は CSS transform 後のビジュアル座標を返すため、
+ * ズーム倍率で割り戻して pre-transform サイズを求め、letterbox を計算する。
+ */
+function getImageDisplayBounds() {
+  const img  = document.getElementById('modal-img');
+  const r    = img.getBoundingClientRect();
+
+  // transform: scale(zoomScale) で拡大される前のサイズ
+  const preW = r.width  / zoomScale;
+  const preH = r.height / zoomScale;
+
+  // object-fit:contain の letterbox オフセット (pre-transform 空間)
+  const natAR  = img.naturalWidth / img.naturalHeight;
+  const elemAR = preW / preH;
+  let baseW, baseH;
+  if (natAR > elemAR) { baseW = preW; baseH = preW / natAR; }
+  else                { baseH = preH; baseW = preH * natAR; }
+
+  // ズーム後の画像表示サイズ・左上座標 (スクリーン座標)
+  const iw = baseW * zoomScale;
+  const ih = baseH * zoomScale;
+  const ix = r.left + (preW - baseW) / 2 * zoomScale;
+  const iy = r.top  + (preH - baseH) / 2 * zoomScale;
+
+  return { ix, iy, iw, ih,
+    scaleX: img.naturalWidth  / iw,
+    scaleY: img.naturalHeight / ih };
+}
+
+/** スクリーン座標 → 画像ピクセル座標 */
+function clientToImagePx(cx, cy) {
+  const b = getImageDisplayBounds();
+  return {
+    x: Math.round((cx - b.ix) * b.scaleX),
+    y: Math.round((cy - b.iy) * b.scaleY)
+  };
+}
+
+/** 画像ピクセル座標 → キャンバス内座標 */
+function imageToCanvas(px, py) {
+  const area     = document.getElementById('image-area');
+  const areaRect = area.getBoundingClientRect();
+  const b        = getImageDisplayBounds();
+  return {
+    cx: (b.ix - areaRect.left) + px / b.scaleX,
+    cy: (b.iy - areaRect.top)  + py / b.scaleY
+  };
+}
+
+// ── キャンバス描画 ─────────────────────────────────────────────────────────
+
+function drawCropCanvas() {
+  const area     = document.getElementById('image-area');
+  const areaRect = area.getBoundingClientRect();
+  cropCanvas.width  = areaRect.width;
+  cropCanvas.height = areaRect.height;
+  cropCtx.clearRect(0, 0, cropCanvas.width, cropCanvas.height);
+
+  if (cropSubMode === 'rect') {
+    _drawRectRegions();
+  } else {
+    _drawPerspPoints();
+  }
+}
+
+function _drawRectRegions() {
+  cropRegions.forEach((r, i) => {
+    const { cx: sx, cy: sy } = imageToCanvas(r.x, r.y);
+    const b  = getImageDisplayBounds();
+    const sw = r.w / b.scaleX;
+    const sh = r.h / b.scaleY;
+
+    cropCtx.strokeStyle = '#f59e0b';
+    cropCtx.lineWidth   = 2;
+    cropCtx.strokeRect(sx, sy, sw, sh);
+    cropCtx.fillStyle   = 'rgba(245,158,11,0.15)';
+    cropCtx.fillRect(sx, sy, sw, sh);
+
+    cropCtx.fillStyle = '#f59e0b';
+    cropCtx.fillRect(sx + 2, sy + 2, 20, 20);
+    cropCtx.fillStyle = '#000';
+    cropCtx.font      = 'bold 12px system-ui';
+    cropCtx.fillText(i + 1, sx + 7, sy + 15);
+  });
+
+  if (cropDraft) {
+    const { cx, cy } = imageToCanvas(cropDraft.x, cropDraft.y);
+    const b  = getImageDisplayBounds();
+    cropCtx.strokeStyle = '#3b82f6';
+    cropCtx.lineWidth   = 2;
+    cropCtx.setLineDash([5, 3]);
+    cropCtx.strokeRect(cx, cy, cropDraft.w / b.scaleX, cropDraft.h / b.scaleY);
+    cropCtx.setLineDash([]);
+  }
+}
+
+const PERSP_LABELS = ['①左上', '②右上', '③右下', '④左下'];
+
+function _drawPerspPoints() {
+  if (perspPoints.length < 1) return;
+
+  // 多角形
+  if (perspPoints.length >= 2) {
+    cropCtx.beginPath();
+    perspPoints.forEach((p, i) => {
+      const { cx, cy } = imageToCanvas(p.x, p.y);
+      i === 0 ? cropCtx.moveTo(cx, cy) : cropCtx.lineTo(cx, cy);
+    });
+    if (perspPoints.length === 4) cropCtx.closePath();
+    cropCtx.strokeStyle = '#8b5cf6';
+    cropCtx.lineWidth   = 2;
+    cropCtx.stroke();
+    cropCtx.fillStyle   = 'rgba(139,92,246,0.10)';
+    if (perspPoints.length === 4) cropCtx.fill();
+  }
+
+  // 頂点ハンドル
+  perspPoints.forEach((p, i) => {
+    const { cx, cy } = imageToCanvas(p.x, p.y);
+    cropCtx.beginPath();
+    cropCtx.arc(cx, cy, 10, 0, Math.PI * 2);
+    cropCtx.fillStyle   = i === perspDragIdx ? '#6d28d9' : '#8b5cf6';
+    cropCtx.fill();
+    cropCtx.strokeStyle = 'white';
+    cropCtx.lineWidth   = 2;
+    cropCtx.stroke();
+
+    cropCtx.fillStyle  = 'white';
+    cropCtx.font       = 'bold 11px system-ui';
+    cropCtx.textAlign  = 'center';
+    cropCtx.textBaseline = 'middle';
+    cropCtx.fillText(i + 1, cx, cy);
+    cropCtx.textAlign    = 'start';
+    cropCtx.textBaseline = 'alphabetic';
+  });
+}
+
+// ── サブモード切り替え ─────────────────────────────────────────────────────
+
+function setCropSubMode(mode) {
+  cropSubMode = mode;
+  document.getElementById('sub-btn-rect') .className = `btn btn-sm ${mode==='rect'  ? 'btn-primary' : 'btn-outline'}`;
+  document.getElementById('sub-btn-persp').className = `btn btn-sm ${mode==='persp' ? 'btn-primary' : 'btn-outline'}`;
+  document.getElementById('crop-rect-panel') .style.display = mode === 'rect'  ? '' : 'none';
+  document.getElementById('crop-persp-panel').style.display = mode === 'persp' ? '' : 'none';
+
+  const hint = document.getElementById('crop-hint');
+  hint.textContent = mode === 'rect'
+    ? 'ドラッグで切り抜き範囲を選択（拡大可）'
+    : '4隅をクリック：①左上→②右上→③右下→④左下';
+
+  perspPoints  = [];
+  perspDragIdx = -1;
+  cropRegions  = [];
+  cropDraft    = null;
+  drawCropCanvas();
+  _updateSidePanels();
+}
+
+// ── サイドパネル更新 ───────────────────────────────────────────────────────
+
+function _updateSidePanels() {
+  const btn   = document.getElementById('crop-exec-btn');
+  const label = document.getElementById('crop-count-label');
+
+  if (cropSubMode === 'rect') {
+    label.textContent = `矩形: ${cropRegions.length}件`;
+    btn.disabled      = cropRegions.length === 0;
+    btn.textContent   = '✂ 切り分け実行';
+
+    document.getElementById('crop-region-list').innerHTML =
+      cropRegions.map((r, i) => `
+        <div class="crop-region-item">
+          <div class="crop-num">${i + 1}</div>
+          <span>${r.w} × ${r.h} px</span>
+          <span class="remove" onclick="removeCropRegion(${i})">×</span>
+        </div>`).join('');
+  } else {
+    label.textContent = `4点: ${perspPoints.length}/4`;
+    btn.disabled      = perspPoints.length !== 4;
+    btn.textContent   = '⬡ 補正・保存';
+
+    document.getElementById('persp-point-list').innerHTML =
+      perspPoints.map((p, i) => `
+        <div class="crop-region-item" style="border-color:#8b5cf6;background:#f5f3ff">
+          <div class="crop-num" style="background:#8b5cf6">${i + 1}</div>
+          <span style="font-size:11px">${PERSP_LABELS[i]}（${p.x}, ${p.y}）</span>
+          <span class="remove" onclick="removePerspPoint(${i})">×</span>
+        </div>`).join('');
+  }
+}
+
+function updateCropList() { _updateSidePanels(); }
+
+function removeCropRegion(i) {
+  cropRegions.splice(i, 1);
+  drawCropCanvas();
+  _updateSidePanels();
+}
+
+function removePerspPoint(i) {
+  perspPoints.splice(i, 1);
+  drawCropCanvas();
+  _updateSidePanels();
+}
+
+function clearCropRegions() {
+  cropRegions  = [];
+  perspPoints  = [];
+  cropDraft    = null;
+  perspDragIdx = -1;
+  drawCropCanvas();
+  _updateSidePanels();
+}
+
+// ── モード開閉 ────────────────────────────────────────────────────────────
+
+function enterCropMode() {
+  cropMode    = true;
+  cropSubMode = 'rect';
+  cropRegions = [];
+  cropDraft   = null;
+  perspPoints = [];
+  // ズームはリセットしない（拡大状態で切り分け可能）
+
+  cropCanvas.style.display = '';
+  document.getElementById('crop-hint')     .style.display = '';
+  document.getElementById('zoom-ctrl')     .style.display = '';   // ズーム操作は残す
+  document.getElementById('normal-footer') .classList.add('hidden');
+  document.getElementById('crop-footer')   .classList.remove('hidden');
+  document.getElementById('form-panel')    .style.display = 'none';
+  document.getElementById('crop-panel')    .style.display = 'flex';
+
+  setCropSubMode('rect');
+}
+
+function exitCropMode() {
+  cropMode = false;
+  cropCanvas.style.display = 'none';
+  document.getElementById('crop-hint')     .style.display = 'none';
+  document.getElementById('zoom-ctrl')     .style.display = '';
+  document.getElementById('normal-footer') .classList.remove('hidden');
+  document.getElementById('crop-footer')   .classList.add('hidden');
+  document.getElementById('form-panel')    .style.display = '';
+  document.getElementById('crop-panel')    .style.display = 'none';
+}
+
+// ── キャンバスイベント ────────────────────────────────────────────────────
+
+/** 指定クライアント座標に近い perspPoint のインデックスを返す（なければ -1）*/
+function _nearPerspIdx(cx, cy, thresh = 14) {
+  const area     = document.getElementById('image-area');
+  const areaRect = area.getBoundingClientRect();
+  const canX = cx - areaRect.left;
+  const canY = cy - areaRect.top;
+  for (let i = 0; i < perspPoints.length; i++) {
+    const { cx: pcx, cy: pcy } = imageToCanvas(perspPoints[i].x, perspPoints[i].y);
+    if (Math.hypot(canX - pcx, canY - pcy) < thresh) return i;
+  }
+  return -1;
+}
+
+cropCanvas.addEventListener('mousedown', e => {
+  if (!cropMode) return;
+  e.preventDefault();
+
+  if (cropSubMode === 'rect') {
+    const pt = clientToImagePx(e.clientX, e.clientY);
+    cropMouseStart = pt;
+    cropDraft = { x: pt.x, y: pt.y, w: 0, h: 0 };
+  } else {
+    // 4点モード: 既存点ならドラッグ、なければ追加
+    const near = _nearPerspIdx(e.clientX, e.clientY);
+    if (near >= 0) {
+      perspDragIdx = near;
+    } else if (perspPoints.length < 4) {
+      const pt = clientToImagePx(e.clientX, e.clientY);
+      perspPoints.push({ x: pt.x, y: pt.y });
+      drawCropCanvas();
+      _updateSidePanels();
+    }
+  }
+});
+
+cropCanvas.addEventListener('mousemove', e => {
+  if (!cropMode) return;
+
+  if (cropSubMode === 'rect' && cropMouseStart) {
+    const pt = clientToImagePx(e.clientX, e.clientY);
+    cropDraft = {
+      x: Math.min(pt.x, cropMouseStart.x),
+      y: Math.min(pt.y, cropMouseStart.y),
+      w: Math.abs(pt.x - cropMouseStart.x),
+      h: Math.abs(pt.y - cropMouseStart.y)
+    };
+    drawCropCanvas();
+  } else if (cropSubMode === 'persp' && perspDragIdx >= 0) {
+    const pt = clientToImagePx(e.clientX, e.clientY);
+    perspPoints[perspDragIdx] = { x: pt.x, y: pt.y };
+    drawCropCanvas();
+    _updateSidePanels();
+  }
+});
+
+cropCanvas.addEventListener('mouseup', e => {
+  if (!cropMode) return;
+
+  if (cropSubMode === 'rect' && cropDraft) {
+    if (cropDraft.w > 10 && cropDraft.h > 10) cropRegions.push({ ...cropDraft });
+    cropDraft      = null;
+    cropMouseStart = null;
+    drawCropCanvas();
+    _updateSidePanels();
+  } else if (cropSubMode === 'persp') {
+    perspDragIdx = -1;
+  }
+});
+
+// ── 実行 ─────────────────────────────────────────────────────────────────
+
+async function executeCrop() {
+  if (!currentPhotoId) return;
+  const btn = document.getElementById('crop-exec-btn');
+  btn.disabled  = true;
+  btn.textContent = '処理中...';
+
+  try {
+    if (cropSubMode === 'rect') {
+      if (cropRegions.length === 0) return;
+      const data = await apiFetch(`/api/photos/${currentPhotoId}/crop`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(cropRegions)
+      });
+      toast(`✅ 保存成功: ${data.created}枚に切り分けました`);
+    } else {
+      if (perspPoints.length !== 4) return;
+      const forceRatio = document.getElementById('persp-ratio-check').checked;
+      const data = await apiFetch(`/api/photos/${currentPhotoId}/perspective-crop`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ points: perspPoints, force_ratio: forceRatio })
+      });
+      const ratioMsg = forceRatio ? '（1.41:1 補正あり）' : '';
+      toast(`✅ 保存成功${ratioMsg}: ${data.filename}`);
+    }
+    exitCropMode();
+    loadPhotos(currentStoreId);
+  } catch (err) {
+    toast('エラー: ' + err.message);
+    btn.disabled    = false;
+    btn.textContent = cropSubMode === 'rect' ? '✂ 切り分け実行' : '⬡ 補正・保存';
+  }
+}
+
+// ── Toast ──────────────────────────────────────────────────────────────────
+let _tt;
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.classList.add('show');
+  clearTimeout(_tt); _tt = setTimeout(() => el.classList.remove('show'), 3000);
+}
+
+// ── Boot ───────────────────────────────────────────────────────────────────
+initAuth();
+</script>
+</body>
+</html>

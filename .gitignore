@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# OCR app – user data (do not commit)
+ocr_app/uploads/
+ocr_app/data/ocr_app.db
+
+# Node.js
+node_modules/
+
+# Environment / secrets
+.env
+.env.local
+
+# OS
+.DS_Store
+Thumbs.db

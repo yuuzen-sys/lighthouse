@@ -1,0 +1,34 @@
+services:
+  - type: web
+    name: lighthouse
+    runtime: python
+    rootDir: ocr_app
+    # ⚠ EasyOCR (日本語モデル) は 2GB 以上の RAM が必要です。
+    #   Render ダッシュボードで Standard Plus 以上のプランを選択してください。
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    disk:
+      name: lighthouse-data
+      mountPath: /var/data
+      sizeGB: 10
+    envVars:
+      # 永続ディスク上のデータディレクトリ
+      - key: DATA_DIR
+        value: /var/data/db
+      # 永続ディスク上の写真アップロードディレクトリ
+      - key: UPLOAD_DIR
+        value: /var/data/uploads
+      # EasyOCR モデルを永続ディスクにキャッシュ（再起動時の再ダウンロード回避）
+      - key: EASYOCR_MODEL_DIR
+        value: /var/data/easyocr
+      # JWT 署名キー（Render が自動生成）
+      - key: SECRET_KEY
+        generateValue: true
+      # Anthropic API キー（ダッシュボードで手動設定）
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      # 初回起動時に管理者アカウントを自動作成（ダッシュボードで手動設定）
+      - key: ADMIN_USERNAME
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
