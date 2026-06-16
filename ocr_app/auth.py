@@ -1,21 +1,25 @@
 import os
+import hashlib
+import bcrypt
 from datetime import datetime, timedelta, timezone
-from passlib.context import CryptContext
 from jose import JWTError, jwt
 
 SECRET_KEY = os.getenv("SECRET_KEY", "dev-secret-key-change-in-production-please")
 ALGORITHM = "HS256"
 TOKEN_EXPIRE_HOURS = int(os.getenv("TOKEN_EXPIRE_HOURS", "168"))  # 7 days
 
-_pwd_ctx = CryptContext(schemes=["bcrypt"], deprecated="auto", bcrypt__truncate_error=False)
+
+def _prehash(password: str) -> bytes:
+    """SHA-256 pre-hash so bcrypt never sees > 72 bytes."""
+    return hashlib.sha256(password.encode("utf-8")).hexdigest().encode("ascii")
 
 
 def hash_password(password: str) -> str:
-    return _pwd_ctx.hash(password)
+    return bcrypt.hashpw(_prehash(password), bcrypt.gensalt()).decode("utf-8")
 
 
 def verify_password(plain: str, hashed: str) -> bool:
-    return _pwd_ctx.verify(plain, hashed)
+    return bcrypt.checkpw(_prehash(plain), hashed.encode("utf-8"))
 
 
 def create_token(username: str) -> str:
