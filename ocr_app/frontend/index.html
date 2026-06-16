@@ -483,20 +483,32 @@
       </div>
       <div id="candidates-view"></div>
 
-      <!-- 端末以外の区分 -->
+      <!-- 端末POP以外のPOP カテゴリ → POP(名称) -->
       <div style="margin-top:20px;padding-top:14px;border-top:1px solid #eee">
-        <div style="font-size:12px;font-weight:700;color:#1e3a5f;margin-bottom:8px">端末以外の区分</div>
+        <div style="font-size:12px;font-weight:700;color:#1e3a5f;margin-bottom:2px">端末POP以外のPOP <span style="font-weight:400;color:#888">→ POP(◯)</span></div>
+        <div style="font-size:11px;color:#888;margin-bottom:8px">HR、料金表、SIMなど。ファイル名は「POP(HR)」のような形式になります。</div>
         <div style="display:flex;gap:8px;margin-bottom:10px">
-          <input type="text" id="new-nondev-cat" placeholder="例: 料金プランPOP" style="flex:1;padding:6px 9px;border:1px solid #ccc;border-radius:5px;font-size:13px">
+          <input type="text" id="new-nondev-cat" placeholder="例: HR" style="flex:1;padding:6px 9px;border:1px solid #ccc;border-radius:5px;font-size:13px">
           <button class="btn btn-primary btn-sm" onclick="addNonDeviceCategory()">追加</button>
         </div>
-        <div id="nondev-cat-view"></div>
+        <div id="pop-cat-view"></div>
+      </div>
+
+      <!-- POP以外カテゴリ → 名称そのもの -->
+      <div style="margin-top:16px;padding-top:14px;border-top:1px solid #eee">
+        <div style="font-size:12px;font-weight:700;color:#1e3a5f;margin-bottom:2px">POP以外 <span style="font-weight:400;color:#888">→ 名称そのもの</span></div>
+        <div style="font-size:11px;color:#888;margin-bottom:8px">店舗外観、店内、什器、デジタルサイネージなど。ファイル名は「什器」のような形式になります。</div>
+        <div style="display:flex;gap:8px;margin-bottom:10px">
+          <input type="text" id="new-nonpop-cat" placeholder="例: 什器" style="flex:1;padding:6px 9px;border:1px solid #ccc;border-radius:5px;font-size:13px">
+          <button class="btn btn-primary btn-sm" onclick="addNonPopCategory()">追加</button>
+        </div>
+        <div id="nonpop-cat-view"></div>
       </div>
 
       <!-- リネームタグ（1:1対応） -->
       <div style="margin-top:20px;padding-top:14px;border-top:1px solid #eee">
         <div style="font-size:12px;font-weight:700;color:#1e3a5f;margin-bottom:4px">リネームタグ（1:1対応）</div>
-        <div style="font-size:11px;color:#888;margin-bottom:10px">価格あり＋機種名が一致する場合に使うタグ名です。一致しない機種はiPhone→POPI、Android→POPAになります。</div>
+        <div style="font-size:11px;color:#888;margin-bottom:10px">機種名に対応するタグ名を登録します。価格ありなら「割引POP（I17）」、価格なしなら「POP（I17）」など用途に合わせて設定してください。</div>
         <div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap;align-items:center">
           <input type="text" id="new-rtag-device" placeholder="機種名（例: iPhone17_256GB）" style="flex:2;min-width:140px;padding:6px 9px;border:1px solid #ccc;border-radius:5px;font-size:12px">
           <span style="color:#aaa;font-size:12px">→</span>
@@ -1627,36 +1639,46 @@ async function addCandidateDevice() {
 
 // ── Non-device categories ───────────────────────────────────────────────────
 function rebuildNonDeviceCatSelect() {
-  const sel  = document.getElementById('f-non-device-cat');
-  const prev = sel.value;
-  const cats = candidates.non_device_categories || [];
-  sel.innerHTML = '<option value="">— 選択 —</option>' +
-    cats.map(c => `<option value="${_esc(c)}">${_esc(c)}</option>`).join('');
-  if (cats.includes(prev)) sel.value = prev;
+  const sel        = document.getElementById('f-non-device-cat');
+  const prev       = sel.value;
+  const popCats    = candidates.pop_categories     || [];
+  const nonPopCats = candidates.non_pop_categories || [];
+  let html = '<option value="">— 選択 —</option>';
+  if (popCats.length) {
+    html += '<optgroup label="端末POP以外のPOP → POP(◯)">';
+    html += popCats.map(c => `<option value="${_esc(c)}">${_esc(c)} → POP(${_esc(c)})</option>`).join('');
+    html += '</optgroup>';
+  }
+  if (nonPopCats.length) {
+    html += '<optgroup label="POP以外 → 名称そのもの">';
+    html += nonPopCats.map(c => `<option value="${_esc(c)}">${_esc(c)}</option>`).join('');
+    html += '</optgroup>';
+  }
+  sel.innerHTML = html;
+  if ([...popCats, ...nonPopCats].includes(prev)) sel.value = prev;
+}
+
+function _renderCatTags(cats, removeFn) {
+  if (!cats.length) return '<div style="color:#bbb;font-size:13px">登録なし</div>';
+  return `<div class="device-tags">${cats.map(c => `
+    <div class="device-tag">
+      <span>${_esc(c)}</span>
+      <span class="remove" onclick="${removeFn}('${c.replace(/'/g,"\\'")}')">×</span>
+    </div>`).join('')}</div>`;
 }
 
 function renderNonDeviceCatView() {
-  const el   = document.getElementById('nondev-cat-view');
-  const cats = candidates.non_device_categories || [];
-  if (!cats.length) {
-    el.innerHTML = '<div style="color:#bbb;font-size:13px">区分が登録されていません</div>';
-    return;
-  }
-  el.innerHTML = `<div class="device-tags">${
-    cats.map(c => `
-      <div class="device-tag">
-        <span>${_esc(c)}</span>
-        <span class="remove" onclick="removeNonDeviceCategory('${c.replace(/'/g,"\\'")}')">×</span>
-      </div>`).join('')
-  }</div>`;
+  const popEl    = document.getElementById('pop-cat-view');
+  const nonPopEl = document.getElementById('nonpop-cat-view');
+  if (popEl)    popEl.innerHTML    = _renderCatTags(candidates.pop_categories     || [], 'removeNonDeviceCategory');
+  if (nonPopEl) nonPopEl.innerHTML = _renderCatTags(candidates.non_pop_categories || [], 'removeNonPopCategory');
 }
 
 async function addNonDeviceCategory() {
   const name = document.getElementById('new-nondev-cat').value.trim();
   if (!name) { toast('区分名を入力してください'); return; }
   await apiFetch('/api/candidates/non-device-category', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ name })
   });
   document.getElementById('new-nondev-cat').value = '';
@@ -1667,8 +1689,29 @@ async function addNonDeviceCategory() {
 async function removeNonDeviceCategory(name) {
   if (!confirm(`「${name}」を削除しますか？`)) return;
   await apiFetch('/api/candidates/non-device-category', {
-    method: 'DELETE',
-    headers: { 'Content-Type': 'application/json' },
+    method: 'DELETE', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name })
+  });
+  await loadCandidates();
+  toast('削除しました: ' + name);
+}
+
+async function addNonPopCategory() {
+  const name = document.getElementById('new-nonpop-cat').value.trim();
+  if (!name) { toast('区分名を入力してください'); return; }
+  await apiFetch('/api/candidates/non-pop-category', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name })
+  });
+  document.getElementById('new-nonpop-cat').value = '';
+  await loadCandidates();
+  toast('追加しました: ' + name);
+}
+
+async function removeNonPopCategory(name) {
+  if (!confirm(`「${name}」を削除しますか？`)) return;
+  await apiFetch('/api/candidates/non-pop-category', {
+    method: 'DELETE', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ name })
   });
   await loadCandidates();
@@ -1752,20 +1795,32 @@ function _computeTagSeg() {
   const renameTags   = candidates.rename_tags   || {};
   const deviceGroups = candidates.device_groups || {};
 
+  const popCats    = candidates.pop_categories     || [];
+  const nonPopCats = candidates.non_pop_categories || [];
+
   let tag = '';
   if (nonDevCat) {
+    if (nonPopCats.includes(nonDevCat)) {
+      // POP以外: キャリアタグなし、カテゴリ名そのまま
+      return nonDevCat;
+    }
+    // 端末POP以外のPOP
     tag = `POP(${nonDevCat})`;
   } else if (device) {
-    if (price && renameTags[device]) {
+    if (renameTags[device]) {
       tag = renameTags[device];
     } else {
       const grp = deviceGroups[device] || '未振り分け';
-      if (grp.includes('iPhone')) {
-        tag = grp === '中古iPhone' ? '中古端末割引POPI' : 'POPI';
-      } else if (grp === '廉価（中華）Android') {
-        tag = '割引POP中華A';
+      if (price) {
+        // 端末割引POP
+        if (grp === '中古iPhone')          tag = '中古端末割引POPI';
+        else if (grp === '中古Android')    tag = '中古端末割引POPA';
+        else if (grp === '廉価（中華）Android') tag = '割引POP中華A';
+        else if (grp.includes('iPhone'))   tag = '割引POPI';
+        else                               tag = '割引POPA';
       } else {
-        tag = 'POPA';
+        // その他の端末POP
+        tag = grp.includes('iPhone') ? 'POPI' : 'POPA';
       }
     }
   }
@@ -1829,7 +1884,7 @@ function removeRenamePart(idx) {
 }
 
 // ── Device groups (drag & drop) ──────────────────────────────────────────────
-const DEVICE_GROUPS = ['最新iPhone', '主要Android', 'その他Android', '廉価（国産）Android', '廉価（中華）Android', '中古iPhone', '未振り分け'];
+const DEVICE_GROUPS = ['最新iPhone', '主要Android', 'その他Android', '廉価（国産）Android', '廉価（中華）Android', '中古iPhone', '中古Android', '未振り分け'];
 let _dgDragName = null;
 
 function renderDeviceGroupBoard() {

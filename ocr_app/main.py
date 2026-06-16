@@ -244,11 +244,12 @@ CANDIDATES_PATH = _DATA_DIR / "candidates.json"
 _BUNDLED_CANDIDATES_PATH = Path(__file__).parent / "data" / "candidates.json"
 
 
-_DEFAULT_NON_DEVICE_CATS = ["料金表", "店舗外観", "什器", "HR", "その他"]
+_DEFAULT_POP_CATS     = ["HR", "料金表", "SIM"]
+_DEFAULT_NON_POP_CATS = ["店舗外観", "店内", "什器", "デジタルサイネージ", "その他"]
 
 DEVICE_GROUPS = [
     "最新iPhone", "主要Android", "その他Android",
-    "廉価（国産）Android", "廉価（中華）Android", "中古iPhone", "未振り分け",
+    "廉価（国産）Android", "廉価（中華）Android", "中古iPhone", "中古Android", "未振り分け",
 ]
 
 CARRIER_ORDER = ["ドコモ", "au", "SB", "UQ", "Y!", "楽天"]
@@ -275,15 +276,25 @@ def _load_candidates() -> dict:
             _save_candidates({
                 "devices": {"新品": [], "中古": [], "その他": []},
                 "prices": [],
-                "non_device_categories": list(_DEFAULT_NON_DEVICE_CATS),
+                "pop_categories": list(_DEFAULT_POP_CATS),
+                "non_pop_categories": list(_DEFAULT_NON_POP_CATS),
                 "device_groups": {},
                 "rename_tags": dict(_DEFAULT_RENAME_TAGS),
             })
     with open(CANDIDATES_PATH, encoding='utf-8') as f:
         data = json.load(f)
     dirty = False
-    if "non_device_categories" not in data:
-        data["non_device_categories"] = list(_DEFAULT_NON_DEVICE_CATS)
+    # Migrate legacy non_device_categories → pop_categories + non_pop_categories
+    if "non_device_categories" in data and "pop_categories" not in data:
+        old = data.pop("non_device_categories")
+        data["pop_categories"]     = [c for c in old if c not in _DEFAULT_NON_POP_CATS] or list(_DEFAULT_POP_CATS)
+        data["non_pop_categories"] = [c for c in old if c in _DEFAULT_NON_POP_CATS]     or list(_DEFAULT_NON_POP_CATS)
+        dirty = True
+    if "pop_categories" not in data:
+        data["pop_categories"] = list(_DEFAULT_POP_CATS)
+        dirty = True
+    if "non_pop_categories" not in data:
+        data["non_pop_categories"] = list(_DEFAULT_NON_POP_CATS)
         dirty = True
     if "device_groups" not in data:
         data["device_groups"] = {}
@@ -551,42 +562,59 @@ def _build_renamed(code: str, store_name: str, note: str, device_name: str, suff
     return _sanitize_filename(full) + suffix
 
 
-def _pop_tag(device: str, price: str, non_dev_cat: str,
+def _pop_tag(device: str, price: str,
              rename_tags: dict, device_groups: dict) -> str:
-    """Return the POP tag (without carrier prefix) for a photo."""
-    if non_dev_cat:
-        return f"POP({non_dev_cat})"
+    """
+    Return the POP tag (without carrier prefix).
+    price あり → 端末割引POP タグ  (割引POPI / 割引POPA / etc.)
+    price なし → その他の端末POP タグ (POPI / POPA)
+    """
     if not device:
         return ""
-    if price and device in rename_tags:
+    if device in rename_tags:
         return rename_tags[device]
     grp = device_groups.get(device, "未振り分け")
-    if "iPhone" in grp:
-        return "中古端末割引POPI" if grp == "中古iPhone" else "POPI"
-    if grp == "廉価（中華）Android":
-        return "割引POP中華A"
-    return "POPA"
+    if price:
+        if grp == "中古iPhone":      return "中古端末割引POPI"
+        if grp == "中古Android":     return "中古端末割引POPA"
+        if grp == "廉価（中華）Android": return "割引POP中華A"
+        if "iPhone" in grp:          return "割引POPI"
+        return "割引POPA"
+    else:
+        if "iPhone" in grp:          return "POPI"
+        return "POPA"
 
 
 def _build_renamed_new(code: str, store_name: str,
                        device: str, non_dev_cat: str, price: str,
                        carriers: list[str], contracts: list[str],
                        rename_tags: dict, device_groups: dict,
+                       pop_categories: list, non_pop_categories: list,
                        suffix: str) -> str:
     """
-    【code】店舗名 [d/au/SB/UQ/Y!/楽天][タグ] ... [新規契約あり].ext
-    キャリア順: ドコモ > au > SB > UQ > Y! > 楽天
+    分類ツリーに基づくリネーム:
+      POP以外          → 【code】店舗名 カテゴリ名.ext  (キャリアタグなし)
+      端末POP以外のPOP → 【code】店舗名 [carrier]POP(カテゴリ).ext
+      端末割引POP      → 【code】店舗名 [carrier]割引POPI/POPA/etc.ext  (price あり)
+      その他の端末POP  → 【code】店舗名 [carrier]POPI/POPA.ext           (price なし)
     """
     prefix = f"【{code}】{store_name}" if code else (store_name or "")
-    tag = _pop_tag(device, price, non_dev_cat, rename_tags, device_groups)
-    if not tag:
-        return _sanitize_filename(prefix) + suffix
-    if carriers:
-        ordered = [c for c in CARRIER_ORDER if c in set(carriers)]
-        parts   = [f"{CARRIER_SYM[c]}{tag}" for c in ordered]
+
+    if non_dev_cat:
+        if non_dev_cat in non_pop_categories:
+            # POP以外: キャリアタグ付加なし、カテゴリ名そのもの
+            full = f"{prefix} {non_dev_cat}".strip()
+            return _sanitize_filename(full) + suffix
+        # 端末POP以外のPOP
+        tag = f"POP({non_dev_cat})"
     else:
-        parts = [tag]
-    body = " ".join(parts)
+        tag = _pop_tag(device, price, rename_tags, device_groups)
+        if not tag:
+            return _sanitize_filename(prefix) + suffix
+
+    ordered = [c for c in CARRIER_ORDER if c in set(carriers or [])]
+    parts   = [f"{CARRIER_SYM[c]}{tag}" for c in ordered] if ordered else [tag]
+    body    = " ".join(parts)
     if "新規" in (contracts or []):
         body += " 新規契約あり"
     full = f"{prefix} {body}".strip()
@@ -641,16 +669,19 @@ def confirm_photo(photo_id: int, req: ConfirmRequest = ConfirmRequest()):
     contracts = json.loads(photo.get("contract_types") or "[]")
     suffix    = Path(photo["original_filename"]).suffix or ".jpg"
 
-    cands        = _load_candidates()
-    rename_tags  = cands.get("rename_tags", {})
-    device_groups = cands.get("device_groups", {})
+    cands            = _load_candidates()
+    rename_tags      = cands.get("rename_tags", {})
+    device_groups    = cands.get("device_groups", {})
+    pop_categories   = cands.get("pop_categories", [])
+    non_pop_categories = cands.get("non_pop_categories", [])
 
     if req.renamed_filename:
         renamed = _sanitize_filename(req.renamed_filename) + suffix
     else:
         renamed = _build_renamed_new(
             code, store, device, non_dev, price,
-            carriers, contracts, rename_tags, device_groups, suffix,
+            carriers, contracts, rename_tags, device_groups,
+            pop_categories, non_pop_categories, suffix,
         )
 
     with get_conn() as conn:
@@ -958,8 +989,9 @@ class CategoryNameBody(BaseModel):
 
 @app.post("/api/candidates/non-device-category")
 def add_non_device_category(data: CategoryNameBody):
+    """端末POP以外のPOP カテゴリを追加 (→ POP(name))"""
     cands = _load_candidates()
-    cats = cands.setdefault("non_device_categories", list(_DEFAULT_NON_DEVICE_CATS))
+    cats = cands.setdefault("pop_categories", list(_DEFAULT_POP_CATS))
     if data.name not in cats:
         cats.append(data.name)
         _save_candidates(cands)
@@ -970,7 +1002,30 @@ def add_non_device_category(data: CategoryNameBody):
 @app.delete("/api/candidates/non-device-category")
 def delete_non_device_category(data: CategoryNameBody):
     cands = _load_candidates()
-    cats = cands.get("non_device_categories", [])
+    cats = cands.get("pop_categories", [])
+    if data.name in cats:
+        cats.remove(data.name)
+        _save_candidates(cands)
+        return {"removed": True}
+    return {"removed": False}
+
+
+@app.post("/api/candidates/non-pop-category")
+def add_non_pop_category(data: CategoryNameBody):
+    """POP以外カテゴリを追加 (→ カテゴリ名そのもの)"""
+    cands = _load_candidates()
+    cats = cands.setdefault("non_pop_categories", list(_DEFAULT_NON_POP_CATS))
+    if data.name not in cats:
+        cats.append(data.name)
+        _save_candidates(cands)
+        return {"added": True}
+    return {"added": False, "reason": "already exists"}
+
+
+@app.delete("/api/candidates/non-pop-category")
+def delete_non_pop_category(data: CategoryNameBody):
+    cands = _load_candidates()
+    cats = cands.get("non_pop_categories", [])
     if data.name in cats:
         cats.remove(data.name)
         _save_candidates(cands)
