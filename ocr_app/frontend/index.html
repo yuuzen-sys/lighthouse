@@ -1935,14 +1935,18 @@ function _computeTagSeg() {
     if (renameTags[device]) {
       tag = renameTags[device];
     } else {
-      const grp = deviceGroups[device] || '未振り分け';
-      if (price) {
+      const grp       = deviceGroups[device] || '未振り分け';
+      const contracts = getSelectedContracts();
+      if (grp === '廉価（中華）Android') {
+        tag = price
+          ? (contracts.includes('新規') ? '割引POP中華A' : '割引POPA')
+          : 'POPA';
+      } else if (price) {
         // 端末割引POP
-        if (grp === '中古iPhone')          tag = '中古端末割引POPI';
-        else if (grp === '中古Android')    tag = '中古端末割引POPA';
-        else if (grp === '廉価（中華）Android') tag = '割引POP中華A';
-        else if (grp.includes('iPhone'))   tag = '割引POPI';
-        else                               tag = '割引POPA';
+        if (grp === '中古iPhone')        tag = '中古端末割引POPI';
+        else if (grp === '中古Android')  tag = '中古端末割引POPA';
+        else if (grp.includes('iPhone')) tag = '割引POPI';
+        else                             tag = '割引POPA';
       } else {
         // その他の端末POP
         tag = grp.includes('iPhone') ? 'POPI' : 'POPA';

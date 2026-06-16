@@ -571,25 +571,30 @@ def _build_renamed(code: str, store_name: str, note: str, device_name: str, suff
 
 
 def _pop_tag(device: str, price: str,
-             rename_tags: dict, device_groups: dict) -> str:
+             rename_tags: dict, device_groups: dict,
+             contracts: list | None = None) -> str:
     """
     Return the POP tag (without carrier prefix).
-    price あり → 端末割引POP タグ  (割引POPI / 割引POPA / etc.)
-    price なし → その他の端末POP タグ (POPI / POPA)
+    廉価（中華）Android → 新規タグあり:割引POP中華A / なし:割引POPA
+    その他 price あり   → 端末割引POP タグ  (割引POPI / 割引POPA / etc.)
+    その他 price なし   → その他の端末POP タグ (POPI / POPA)
     """
     if not device:
         return ""
     if device in rename_tags:
         return rename_tags[device]
     grp = device_groups.get(device, "未振り分け")
+    if grp == "廉価（中華）Android":
+        if price:
+            return "割引POP中華A" if "新規" in (contracts or []) else "割引POPA"
+        return "POPA"
     if price:
-        if grp == "中古iPhone":      return "中古端末割引POPI"
-        if grp == "中古Android":     return "中古端末割引POPA"
-        if grp == "廉価（中華）Android": return "割引POP中華A"
-        if "iPhone" in grp:          return "割引POPI"
+        if grp == "中古iPhone":  return "中古端末割引POPI"
+        if grp == "中古Android": return "中古端末割引POPA"
+        if "iPhone" in grp:      return "割引POPI"
         return "割引POPA"
     else:
-        if "iPhone" in grp:          return "POPI"
+        if "iPhone" in grp: return "POPI"
         return "POPA"
 
 
@@ -616,7 +621,7 @@ def _build_renamed_new(code: str, store_name: str,
         # 端末POP以外のPOP
         tag = f"POP({non_dev_cat})"
     else:
-        tag = _pop_tag(device, price, rename_tags, device_groups)
+        tag = _pop_tag(device, price, rename_tags, device_groups, contracts)
         if not tag:
             return _sanitize_filename(prefix) + suffix
 
