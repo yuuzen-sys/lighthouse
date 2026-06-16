@@ -1187,11 +1187,32 @@ async function uploadFiles(files) {
   if (!currentStoreId) { toast('店舗を選択してください'); return; }
   const imgs = files.filter(f => f.type.startsWith('image/'));
   if (!imgs.length) { toast('画像ファイルを選択してください'); return; }
-  const fd = new FormData();
-  imgs.forEach(f => fd.append('files', f));
-  fd.append('store_id', currentStoreId);
-  const data = await apiFetch('/api/photos/upload', { method: 'POST', body: fd });
-  toast(`${data.uploaded}枚アップロード完了`);
+
+  const BATCH = 20;
+  let uploaded = 0;
+  const progressEl = document.getElementById('progress-wrap');
+  const progressTxt = document.getElementById('progress-text');
+  const progressFill = document.getElementById('progress-fill');
+  progressEl.style.display = '';
+
+  for (let i = 0; i < imgs.length; i += BATCH) {
+    const chunk = imgs.slice(i, i + BATCH);
+    const fd = new FormData();
+    chunk.forEach(f => fd.append('files', f));
+    fd.append('store_id', currentStoreId);
+    try {
+      const data = await apiFetch('/api/photos/upload', { method: 'POST', body: fd });
+      uploaded += data.uploaded;
+    } catch (e) {
+      toast(`エラー（${i + 1}〜${i + chunk.length}枚目）: ` + e.message);
+    }
+    const pct = Math.round(((i + chunk.length) / imgs.length) * 100);
+    progressTxt.textContent  = `アップロード中… ${Math.min(i + chunk.length, imgs.length)} / ${imgs.length}枚`;
+    progressFill.style.width = `${pct}%`;
+  }
+
+  progressEl.style.display = 'none';
+  toast(`${uploaded}枚アップロード完了`);
   loadPhotos(currentStoreId);
 }
 
