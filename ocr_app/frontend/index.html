@@ -2168,7 +2168,7 @@ async function doExport() {
 
 // ── Export Excel ────────────────────────────────────────────────────────────
 async function exportExcel() {
-  const path = currentStoreId ? `/api/export?store_id=${currentStoreId}` : '/api/export';
+  const path = '/api/export';  // 常に全店舗出力
   const res = await fetch(API + path, {
     headers: authToken ? { 'Authorization': `Bearer ${authToken}` } : {}
   });
