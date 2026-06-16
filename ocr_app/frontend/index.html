@@ -38,8 +38,11 @@
   /* ── Photo Grid ── */
   .toolbar { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
   .photo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; }
-  .photo-card { background: white; border-radius: 7px; overflow: hidden; border: 2px solid #e0e0e0; transition: border-color 0.15s; cursor: pointer; }
+  .photo-card { background: white; border-radius: 7px; overflow: hidden; border: 2px solid #e0e0e0; transition: border-color 0.15s, background 0.12s; cursor: pointer; position: relative; }
   .photo-card:hover { border-color: #1e3a5f; }
+  .photo-card.sel-selected { border-color: #1e3a5f !important; background: #e8efff; }
+  .sel-check { position:absolute; top:5px; right:5px; width:22px; height:22px; border-radius:50%; border:2px solid #1e3a5f; background:white; display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700; color:#1e3a5f; pointer-events:none; }
+  .sel-selected .sel-check { background:#1e3a5f; color:white; }
   .photo-card.status-pending   { border-color: #ddd; }
   .photo-card.status-analyzing { border-color: #3b82f6; animation: pulse-blue 1.4s ease-in-out infinite; }
   .photo-card.status-analyzed  { border-color: #d97706; }
@@ -218,7 +221,13 @@
           <button class="btn btn-primary btn-sm" onclick="document.getElementById('file-input').click()">ファイル選択</button>
           <input type="file" id="file-input" multiple accept="image/*" style="display:none" onchange="handleFileSelect(event)">
         </div>
-        <button class="btn btn-success btn-sm" onclick="analyzeAll()">▶ 一括解析</button>
+        <span id="toolbar-normal"><button class="btn btn-success btn-sm" onclick="enterSelectionMode()">解析対象を選択</button></span>
+        <span id="toolbar-select" style="display:none;display:none;align-items:center;gap:6px">
+          <span id="sel-count" style="font-size:12px;color:#555;white-space:nowrap">0枚選択</span>
+          <button class="btn btn-outline btn-sm" onclick="selectAllPending()">未処理全選択</button>
+          <button class="btn btn-outline btn-sm" onclick="exitSelectionMode()">✕ キャンセル</button>
+          <button class="btn btn-success btn-sm" id="analyze-sel-btn" onclick="analyzeSelected()" disabled>▶ 一括解析</button>
+        </span>
       </div>
       <div class="progress-wrap" id="progress-wrap" style="display:none">
         <div style="font-size:12px;color:#555" id="progress-text">解析中...</div>
@@ -1135,8 +1144,12 @@ function _renderFilteredGrid() {
     return;
   }
 
-  grid.innerHTML = filtered.map(p => `
-    <div class="photo-card status-${p.status}" onclick="openPhotoModal(${p.id})">
+  grid.innerHTML = filtered.map(p => {
+    const sel     = _selMode && _selIds.has(p.id);
+    const onClick = _selMode ? `togglePhotoSelection(${p.id})` : `openPhotoModal(${p.id})`;
+    return `
+    <div class="photo-card status-${p.status}${sel ? ' sel-selected' : ''}" data-id="${p.id}" onclick="${onClick}">
+      ${_selMode ? `<div class="sel-check">${sel ? '✓' : ''}</div>` : ''}
       <img class="photo-thumb" src="${API}/uploads/${p.stored_filename}" alt="" loading="lazy">
       <div class="photo-info">
         ${filterPanelOpen && p.store_code ? `<div style="font-size:9px;color:#7a9cc8;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:1px">[${_esc(p.store_code)}] ${_esc(p.store_name||'')}</div>` : ''}
@@ -1145,8 +1158,8 @@ function _renderFilteredGrid() {
         <div class="photo-price">${_fmtPrice(p.price)}</div>
         <span class="status-chip chip-${p.status}">${statusLabel(p.status)}</span>
       </div>
-    </div>
-  `).join('');
+    </div>`;
+  }).join('');
 }
 
 function renderPhotoGrid() {
@@ -1182,17 +1195,60 @@ async function uploadFiles(files) {
   loadPhotos(currentStoreId);
 }
 
-// ── Batch analyze ──────────────────────────────────────────────────────────
-async function analyzeAll() {
-  const pending = photos.filter(p => p.status === 'pending');
-  if (!pending.length) { toast('解析待ちの写真がありません'); return; }
+// ── Selection mode ─────────────────────────────────────────────────────────
+let _selMode = false;
+let _selIds  = new Set();
 
-  // 全件をまとめてキューへ（サーバー側で順番に処理）
+function enterSelectionMode() {
+  _selMode = true;
+  _selIds.clear();
+  document.getElementById('toolbar-normal').style.display = 'none';
+  const sel = document.getElementById('toolbar-select');
+  sel.style.display = 'flex';
+  _updateSelCount();
+  _renderFilteredGrid();
+}
+
+function exitSelectionMode() {
+  _selMode = false;
+  _selIds.clear();
+  document.getElementById('toolbar-normal').style.display = '';
+  document.getElementById('toolbar-select').style.display = 'none';
+  _renderFilteredGrid();
+}
+
+function togglePhotoSelection(id) {
+  if (_selIds.has(id)) _selIds.delete(id);
+  else _selIds.add(id);
+  _updateSelCount();
+  // toggle CSS directly without full re-render
+  const card = document.querySelector(`.photo-card[data-id="${id}"]`);
+  if (card) {
+    card.classList.toggle('sel-selected', _selIds.has(id));
+    card.querySelector('.sel-check').textContent = _selIds.has(id) ? '✓' : '';
+  }
+}
+
+function _updateSelCount() {
+  document.getElementById('sel-count').textContent = `${_selIds.size}枚選択`;
+  document.getElementById('analyze-sel-btn').disabled = _selIds.size === 0;
+}
+
+function selectAllPending() {
+  photos.filter(p => p.status === 'pending').forEach(p => _selIds.add(p.id));
+  _updateSelCount();
+  _renderFilteredGrid();
+}
+
+async function analyzeSelected() {
+  if (!_selIds.size) return;
+  const ids = [..._selIds];
+  exitSelectionMode();
   const authHeader = authToken ? { 'Authorization': `Bearer ${authToken}` } : {};
-  await Promise.all(pending.map(p =>
-    fetch(`${API}/api/photos/${p.id}/analyze`, { method: 'POST', headers: authHeader }).catch(() => {})
+  await Promise.all(ids.map(id =>
+    fetch(`${API}/api/photos/${id}/analyze`, { method: 'POST', headers: authHeader }).catch(() => {})
   ));
-  toast(`${pending.length}枚をバックグラウンド解析キューに追加しました`);
+  toast(`${ids.length}枚をバックグラウンド解析キューに追加しました`);
   await loadPhotos(currentStoreId);
   startPolling();
 }
