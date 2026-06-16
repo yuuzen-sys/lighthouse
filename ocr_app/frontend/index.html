@@ -1158,7 +1158,7 @@ function _renderFilteredGrid() {
     <div class="photo-card status-${p.status}${sel ? ' sel-selected' : ''}" data-id="${p.id}" onclick="${onClick}">
       ${_selMode ? `<div class="sel-check">${sel ? '✓' : ''}</div>` : ''}
       ${lockBadge}
-      <img class="photo-thumb" src="${API}/uploads/${p.stored_filename}" alt="" loading="lazy">
+      <img class="photo-thumb" src="${API}/uploads/${p.stored_filename}?v=${encodeURIComponent(p.updated_at||'')}" alt="" loading="lazy">
       <div class="photo-info">
         ${filterPanelOpen && p.store_code ? `<div style="font-size:9px;color:#7a9cc8;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:1px">[${_esc(p.store_code)}] ${_esc(p.store_name||'')}</div>` : ''}
         <div class="photo-name" title="${_esc(p.renamed_filename || p.original_filename)}">${_esc(p.renamed_filename || p.original_filename)}</div>
@@ -1382,7 +1382,7 @@ async function openPhotoModal(photoId) {
   document.getElementById('photo-modal').classList.remove('hidden');
   document.getElementById('modal-title').textContent = photo.original_filename;
   const img = document.getElementById('modal-img');
-  img.src = `${API}/uploads/${photo.stored_filename}`;
+  img.src = `${API}/uploads/${photo.stored_filename}?v=${encodeURIComponent(photo.updated_at || '')}`;
   zoomScale = 1; panX = 0; panY = 0;
   applyTransform();
 

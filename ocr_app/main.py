@@ -829,6 +829,12 @@ def rotate_photo(photo_id: int, req: RotateRequest):
     with open(path, "wb") as f:
         f.write(buf.getvalue())
 
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE photos SET updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            (photo_id,)
+        )
+
     return {"ok": True}
 
 
