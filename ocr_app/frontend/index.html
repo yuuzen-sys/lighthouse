@@ -1176,8 +1176,9 @@ async function analyzeAll() {
   if (!pending.length) { toast('解析待ちの写真がありません'); return; }
 
   // 全件をまとめてキューへ（サーバー側で順番に処理）
+  const authHeader = authToken ? { 'Authorization': `Bearer ${authToken}` } : {};
   await Promise.all(pending.map(p =>
-    fetch(`${API}/api/photos/${p.id}/analyze`, { method: 'POST' }).catch(() => {})
+    fetch(`${API}/api/photos/${p.id}/analyze`, { method: 'POST', headers: authHeader }).catch(() => {})
   ));
   toast(`${pending.length}枚をバックグラウンド解析キューに追加しました`);
   await loadPhotos(currentStoreId);
