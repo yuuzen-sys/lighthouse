@@ -1995,8 +1995,17 @@ async function doExport() {
 
 // ── Export Excel ────────────────────────────────────────────────────────────
 async function exportExcel() {
-  const url = API + (currentStoreId ? `/api/export?store_id=${currentStoreId}` : '/api/export');
-  const res = await fetch(url);
+  const path = currentStoreId ? `/api/export?store_id=${currentStoreId}` : '/api/export';
+  const res = await fetch(API + path, {
+    headers: authToken ? { 'Authorization': `Bearer ${authToken}` } : {}
+  });
+  if (res.status === 401) {
+    authToken = null; currentUsername = null;
+    localStorage.removeItem('lighthouse_token');
+    _showLoginModal();
+    return;
+  }
+  if (!res.ok) { alert('Excelエクスポートに失敗しました'); return; }
   const blob = await res.blob();
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
