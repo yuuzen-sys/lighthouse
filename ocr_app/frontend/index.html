@@ -50,6 +50,8 @@
   .photo-card.status-done      { border-color: #16a34a; }
   .photo-card.status-skip      { border-color: #d1d5db; opacity: 0.55; }
   .photo-card.status-error     { border-color: #dc2626; }
+  .lock-badge { position:absolute; bottom:5px; left:5px; background:rgba(220,38,38,0.85); color:white; font-size:10px; font-weight:600; padding:2px 7px; border-radius:10px; pointer-events:none; white-space:nowrap; max-width:calc(100% - 10px); overflow:hidden; text-overflow:ellipsis; }
+  #lock-banner { display:none; background:#fef2f2; border-bottom:2px solid #dc2626; color:#dc2626; font-weight:600; font-size:13px; padding:8px 16px; text-align:center; flex-shrink:0; }
   @keyframes pulse-blue { 0%,100%{border-color:#3b82f6} 50%{border-color:#93c5fd} }
   .photo-thumb { width: 100%; height: 130px; object-fit: cover; display: block; }
   .photo-info { padding: 7px 8px; }
@@ -304,6 +306,7 @@
       <h2 id="modal-title">写真詳細</h2>
       <button class="btn btn-outline btn-sm" onclick="closePhotoModal()">✕ 閉じる</button>
     </div>
+    <div id="lock-banner"></div>
     <div class="modal-body">
       <div class="image-area" id="image-area">
         <img id="modal-img" src="" alt="">
@@ -726,6 +729,8 @@ let currentPhotoId = null;
 let zoomScale = 1;
 let panX = 0, panY = 0;
 let isPanning = false, panStartX = 0, panStartY = 0, didPan = false;
+let _lockReadOnly   = false;
+let _heartbeatTimer = null;
 
 // ── Auth ───────────────────────────────────────────────────────────────────
 async function initAuth() {
@@ -1145,11 +1150,14 @@ function _renderFilteredGrid() {
   }
 
   grid.innerHTML = filtered.map(p => {
-    const sel     = _selMode && _selIds.has(p.id);
-    const onClick = _selMode ? `togglePhotoSelection(${p.id})` : `openPhotoModal(${p.id})`;
+    const sel      = _selMode && _selIds.has(p.id);
+    const onClick  = _selMode ? `togglePhotoSelection(${p.id})` : `openPhotoModal(${p.id})`;
+    const lockBadge = (p.locked_by && p.locked_by !== currentUsername)
+      ? `<div class="lock-badge">🔒 ${_esc(p.locked_by)}</div>` : '';
     return `
     <div class="photo-card status-${p.status}${sel ? ' sel-selected' : ''}" data-id="${p.id}" onclick="${onClick}">
       ${_selMode ? `<div class="sel-check">${sel ? '✓' : ''}</div>` : ''}
+      ${lockBadge}
       <img class="photo-thumb" src="${API}/uploads/${p.stored_filename}" alt="" loading="lazy">
       <div class="photo-info">
         ${filterPanelOpen && p.store_code ? `<div style="font-size:9px;color:#7a9cc8;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:1px">[${_esc(p.store_code)}] ${_esc(p.store_name||'')}</div>` : ''}
@@ -1346,7 +1354,24 @@ function setContracts(contracts) {
 }
 
 // ── Photo modal ────────────────────────────────────────────────────────────
+
+function _setLockReadOnly(readOnly, lockedBy) {
+  _lockReadOnly = readOnly;
+  const banner = document.getElementById('lock-banner');
+  banner.textContent = readOnly ? `🔒 ${lockedBy} が作業中です（閲覧のみ）` : '';
+  banner.style.display = readOnly ? '' : 'none';
+  document.querySelectorAll('#normal-footer button').forEach(b => {
+    if (b.getAttribute('onclick') !== 'closePhotoModal()') b.disabled = readOnly;
+  });
+  document.querySelectorAll('#form-panel input, #form-panel select, #form-panel button').forEach(el => {
+    el.disabled = readOnly;
+  });
+}
+
 async function openPhotoModal(photoId) {
+  if (_heartbeatTimer) { clearInterval(_heartbeatTimer); _heartbeatTimer = null; }
+  _setLockReadOnly(false, null);
+
   currentPhotoId = photoId;
   _renameParts = [];
   const chipEl = document.getElementById('rename-parts-list');
@@ -1393,11 +1418,33 @@ async function openPhotoModal(photoId) {
   } else if (photo.status === 'analyzing') {
     document.getElementById('raw-box').textContent = '解析中… 完了後に自動更新されます';
   }
+
+  // ロック取得（他ユーザーが作業中なら閲覧専用に切り替え）
+  try {
+    const lockRes = await apiFetch(`/api/photos/${photoId}/lock`, { method: 'POST' });
+    if (!lockRes.ok) {
+      _setLockReadOnly(true, lockRes.locked_by);
+    } else {
+      _heartbeatTimer = setInterval(async () => {
+        if (currentPhotoId) {
+          try { await apiFetch(`/api/photos/${currentPhotoId}/lock/heartbeat`, { method: 'POST' }); }
+          catch {}
+        }
+      }, 60000);
+    }
+  } catch {}
 }
 
 function closePhotoModal() {
-  document.getElementById('photo-modal').classList.add('hidden');
+  if (_heartbeatTimer) { clearInterval(_heartbeatTimer); _heartbeatTimer = null; }
+  const relId = currentPhotoId;
   currentPhotoId = null;
+  if (relId && !_lockReadOnly) {
+    apiFetch(`/api/photos/${relId}/lock`, { method: 'DELETE' }).catch(() => {});
+  }
+  _lockReadOnly = false;
+  document.getElementById('photo-modal').classList.add('hidden');
+  document.getElementById('lock-banner').style.display = 'none';
   loadPhotos(currentStoreId);
 }
 
@@ -1535,6 +1582,7 @@ async function confirmPhoto() {
   document.getElementById('rename-parts-list').style.display = 'none';
   document.getElementById('rename-preview').textContent = data.renamed_filename || '';
   toast('確定: ' + (data.renamed_filename || ''));
+  closePhotoModal();
 }
 
 // ── Zoom ───────────────────────────────────────────────────────────────────
@@ -2433,7 +2481,10 @@ function enterCropMode() {
   document.getElementById('form-panel')    .style.display = 'none';
   document.getElementById('crop-panel')    .style.display = 'flex';
 
-  setCropSubMode('rect');
+  const ratioCheck = document.getElementById('persp-ratio-check');
+  ratioCheck.checked = true;
+  document.getElementById('persp-ratio-note').style.display = '';
+  setCropSubMode('persp');
 }
 
 function exitCropMode() {

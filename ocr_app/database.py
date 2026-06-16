@@ -68,5 +68,11 @@ def init_db():
                 hashed_password TEXT NOT NULL,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP
             );
+
+            CREATE TABLE IF NOT EXISTS photo_locks (
+                photo_id INTEGER PRIMARY KEY REFERENCES photos(id) ON DELETE CASCADE,
+                username TEXT NOT NULL,
+                locked_at REAL NOT NULL
+            );
         """)
         _migrate(conn)

@@ -8,6 +8,7 @@ import json
 import shutil
 import io
 import asyncio
+import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from datetime import datetime
@@ -68,6 +69,7 @@ app.mount("/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
 app.mount("/static", StaticFiles(directory=str(Path(__file__).parent / "frontend")), name="static")
 
 CLAUDE_API_KEY = os.getenv("ANTHROPIC_API_KEY")
+LOCK_TTL = 180  # 3分間ハートビートがなければロック期限切れ
 
 # OCR は CPU ヘビーなので 1 スレッドで直列処理（複数写真をキューイング）
 _ocr_pool = ThreadPoolExecutor(max_workers=1)
@@ -449,19 +451,25 @@ async def upload_photos(
 
 @app.get("/api/photos")
 def list_photos(store_id: int | None = None):
+    expiry = time.time() - LOCK_TTL
     with get_conn() as conn:
         if store_id:
             rows = conn.execute(
-                """SELECT p.*, s.code as store_code, s.name as store_name
+                """SELECT p.*, s.code as store_code, s.name as store_name,
+                          CASE WHEN l.locked_at >= ? THEN l.username ELSE NULL END as locked_by
                    FROM photos p LEFT JOIN stores s ON p.store_id = s.id
+                   LEFT JOIN photo_locks l ON l.photo_id = p.id
                    WHERE p.store_id = ? ORDER BY p.created_at""",
-                (store_id,)
+                (expiry, store_id)
             ).fetchall()
         else:
             rows = conn.execute(
-                """SELECT p.*, s.code as store_code, s.name as store_name
+                """SELECT p.*, s.code as store_code, s.name as store_name,
+                          CASE WHEN l.locked_at >= ? THEN l.username ELSE NULL END as locked_by
                    FROM photos p LEFT JOIN stores s ON p.store_id = s.id
-                   ORDER BY p.store_id, p.created_at"""
+                   LEFT JOIN photo_locks l ON l.photo_id = p.id
+                   ORDER BY p.store_id, p.created_at""",
+                (expiry,)
             ).fetchall()
     result = []
     for r in rows:
@@ -1173,6 +1181,59 @@ def list_devices():
     return [r["device_name"] for r in rows]
 
 
+# ─── Photo locks ──────────────────────────────────────────────────────────────
+
+@app.post("/api/photos/{photo_id}/lock")
+def acquire_lock(photo_id: int, request: Request):
+    """写真の編集ロックを取得する。他ユーザーがロック中なら ok=False を返す。"""
+    username = request.state.username
+    now = time.time()
+    expiry = now - LOCK_TTL
+    with get_conn() as conn:
+        conn.execute("DELETE FROM photo_locks WHERE locked_at < ?", (expiry,))
+        existing = conn.execute(
+            "SELECT username FROM photo_locks WHERE photo_id = ?", (photo_id,)
+        ).fetchone()
+        if existing:
+            if existing["username"] == username:
+                conn.execute(
+                    "UPDATE photo_locks SET locked_at = ? WHERE photo_id = ?",
+                    (now, photo_id)
+                )
+                return {"ok": True}
+            return {"ok": False, "locked_by": existing["username"]}
+        conn.execute(
+            "INSERT INTO photo_locks (photo_id, username, locked_at) VALUES (?, ?, ?)",
+            (photo_id, username, now)
+        )
+    return {"ok": True}
+
+
+@app.delete("/api/photos/{photo_id}/lock")
+def release_lock(photo_id: int, request: Request):
+    """自分が保持しているロックを解放する。"""
+    username = request.state.username
+    with get_conn() as conn:
+        conn.execute(
+            "DELETE FROM photo_locks WHERE photo_id = ? AND username = ?",
+            (photo_id, username)
+        )
+    return {"ok": True}
+
+
+@app.post("/api/photos/{photo_id}/lock/heartbeat")
+def heartbeat_lock(photo_id: int, request: Request):
+    """ロックのタイムスタンプを更新して期限切れを防ぐ（60秒ごとに呼ぶ）。"""
+    username = request.state.username
+    now = time.time()
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE photo_locks SET locked_at = ? WHERE photo_id = ? AND username = ?",
+            (now, photo_id, username)
+        )
+    return {"ok": True}
+
+
 # ─── File Export (server-side copy) ──────────────────────────────────────────
 
 def _safe_copy(src: Path, dest_dir: Path, fname: str) -> str:
@@ -1219,41 +1280,61 @@ def export_zip(mode: str = "confirmed", store_id: int | None = None, device_name
     with get_conn() as conn:
         rows = conn.execute(q, params).fetchall()
 
-    buf = io.BytesIO()
-    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-        seen: dict[str, int] = {}
-        for row in rows:
-            r = dict(row)
-            src = UPLOAD_DIR / r["stored_filename"]
-            if not src.exists():
-                continue
+    import tempfile
 
-            orig_suffix = Path(r["stored_filename"]).suffix.lower() or ".jpg"
-            if mode == "unprocessed":
-                fname = _sanitize_filename(Path(r["original_filename"]).stem) + Path(r["original_filename"]).suffix
-            elif r.get("renamed_filename"):
-                base = Path(r["renamed_filename"])
-                fname = _sanitize_filename(base.stem) + (base.suffix or orig_suffix)
-            else:
-                fname = _build_renamed(
-                    r.get("store_code") or "", r.get("store_name") or "",
-                    r.get("note") or "", r.get("device_name") or "", orig_suffix,
-                )
+    tmp_fd, tmp_path = tempfile.mkstemp(suffix=".zip", dir=str(_DATA_DIR))
+    os.close(tmp_fd)
 
-            # Deduplicate names inside the ZIP
-            if fname in seen:
-                seen[fname] += 1
-                stem, ext = Path(fname).stem, Path(fname).suffix
-                fname = f"{stem} ({seen[fname]}){ext}"
-            else:
-                seen[fname] = 1
+    try:
+        with zipfile.ZipFile(tmp_path, "w", zipfile.ZIP_STORED) as zf:
+            seen: dict[str, int] = {}
+            for row in rows:
+                r = dict(row)
+                src = UPLOAD_DIR / r["stored_filename"]
+                if not src.exists():
+                    continue
 
-            with open(src, "rb") as f:
-                zf.writestr(fname, f.read())
+                orig_suffix = Path(r["stored_filename"]).suffix.lower() or ".jpg"
+                if mode == "unprocessed":
+                    fname = _sanitize_filename(Path(r["original_filename"]).stem) + Path(r["original_filename"]).suffix
+                elif r.get("renamed_filename"):
+                    base = Path(r["renamed_filename"])
+                    fname = _sanitize_filename(base.stem) + (base.suffix or orig_suffix)
+                else:
+                    fname = _build_renamed(
+                        r.get("store_code") or "", r.get("store_name") or "",
+                        r.get("note") or "", r.get("device_name") or "", orig_suffix,
+                    )
+
+                # Deduplicate names inside the ZIP
+                if fname in seen:
+                    seen[fname] += 1
+                    stem, ext = Path(fname).stem, Path(fname).suffix
+                    fname = f"{stem} ({seen[fname]}){ext}"
+                else:
+                    seen[fname] = 1
+
+                # zf.write() reads src in ~64 KB chunks — no full-file RAM load
+                zf.write(str(src), fname)
+    except Exception:
+        os.unlink(tmp_path)
+        raise
 
     zip_name = f"photos_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip"
-    return Response(
-        content=buf.getvalue(),
+
+    def _stream_and_delete():
+        try:
+            with open(tmp_path, "rb") as f:
+                while chunk := f.read(1024 * 1024):
+                    yield chunk
+        finally:
+            try:
+                os.unlink(tmp_path)
+            except Exception:
+                pass
+
+    return StreamingResponse(
+        _stream_and_delete(),
         media_type="application/zip",
         headers={"Content-Disposition": f'attachment; filename="{zip_name}"'},
     )
