@@ -415,6 +415,10 @@
           <input type="text" id="f-price" placeholder="例: 87384" oninput="updateRenamePreview()">
         </div>
         <div class="form-group">
+          <label>頭金（円）</label>
+          <input type="text" id="f-deposit" placeholder="未記載なら0円">
+        </div>
+        <div class="form-group">
           <label>備考</label>
           <textarea id="f-note" rows="2" placeholder="任意メモ"></textarea>
         </div>
@@ -1130,6 +1134,13 @@ function _fmtPrice(v) {
   const n = Number(String(v).replace(/[,，\s]/g, ''));
   return isNaN(n) ? `¥${v}` : `¥${n.toLocaleString()}`;
 }
+function _fmtPriceDeposit(price, deposit) {
+  if (!price) return '';
+  const p = _fmtPrice(price);
+  if (!deposit) return p;
+  const d = Number(String(deposit).replace(/[,，\s]/g, ''));
+  return `${p}(${isNaN(d) ? deposit : d.toLocaleString()})`;
+}
 
 const STATUS_ORDER = { pending:0, skip:1, error:2, analyzing:3, analyzed:4, confirmed:5, done:6 };
 
@@ -1171,7 +1182,7 @@ function _renderFilteredGrid() {
         ${filterPanelOpen && p.store_code ? `<div style="font-size:9px;color:#7a9cc8;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:1px">[${_esc(p.store_code)}] ${_esc(p.store_name||'')}</div>` : ''}
         <div class="photo-name" title="${_esc(p.renamed_filename || p.original_filename)}">${_esc(p.renamed_filename || p.original_filename)}</div>
         <div class="photo-device">${_esc(p.device_name || p.non_device_category || '')}</div>
-        <div class="photo-price">${_fmtPrice(p.price)}</div>
+        <div class="photo-price">${_fmtPriceDeposit(p.price, p.deposit)}</div>
         <span class="status-chip chip-${p.status}">${statusLabel(p.status)}</span>
       </div>
     </div>`;
@@ -1407,7 +1418,8 @@ async function openPhotoModal(photoId) {
   document.getElementById('f-category').value = photo.device_category || '';
   setCarriers(photo.carriers || []);
   setContracts(photo.contract_types || []);
-  document.getElementById('f-price').value = photo.price || '';
+  document.getElementById('f-price').value   = photo.price   || '';
+  document.getElementById('f-deposit').value = photo.deposit || '';
   document.getElementById('f-note').value = photo.note || '';
   document.getElementById('rename-preview').textContent = photo.renamed_filename || '';
   document.getElementById('device-cands').innerHTML = '';
@@ -1559,7 +1571,8 @@ async function savePhoto() {
     carriers: getSelectedCarriers(),
     contract_types: getSelectedContracts(),
     non_device_category: document.getElementById('f-non-device-cat').value || null,
-    price: document.getElementById('f-price').value.replace(/[,，\s]/g, '') || null,
+    price:   document.getElementById('f-price').value.replace(/[,，\s]/g, '')   || null,
+    deposit: document.getElementById('f-deposit').value.replace(/[,，\s]/g, '') || null,
     note: document.getElementById('f-note').value || null,
   };
   await apiFetch(`/api/photos/${currentPhotoId}`, {

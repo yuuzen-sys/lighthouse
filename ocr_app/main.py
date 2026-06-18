@@ -527,6 +527,7 @@ class PhotoUpdate(BaseModel):
     device_name: str | None = None
     device_category: str | None = None
     price: str | None = None
+    deposit: str | None = None
     note: str | None = None
     carriers: list[str] | None = None
     contract_types: list[str] | None = None
@@ -645,11 +646,11 @@ def update_photo(photo_id: int, data: PhotoUpdate):
     with get_conn() as conn:
         conn.execute(
             """UPDATE photos
-               SET device_name = ?, device_category = ?, price = ?, note = ?,
+               SET device_name = ?, device_category = ?, price = ?, deposit = ?, note = ?,
                    carriers = ?, contract_types = ?, non_device_category = ?,
                    status = 'confirmed', updated_at = CURRENT_TIMESTAMP
                WHERE id = ?""",
-            (data.device_name, data.device_category, data.price, data.note,
+            (data.device_name, data.device_category, data.price, data.deposit, data.note,
              carriers_json, contract_types_json, data.non_device_category, photo_id)
         )
     return {"ok": True}
@@ -1129,7 +1130,7 @@ def export_excel(store_id: int | None = None):
     ws = wb.active
     ws.title = "写真一覧"
 
-    headers = ["店舗コード", "店舗名", "元ファイル名", "機種名", "カテゴリ", "端末以外区分", "キャリア", "契約種別", "金額", "備考", "リネーム後ファイル名", "ステータス"]
+    headers = ["店舗コード", "店舗名", "元ファイル名", "機種名", "カテゴリ", "端末以外区分", "キャリア", "契約種別", "金額", "金額(頭金金額)", "備考", "リネーム後ファイル名", "ステータス"]
     header_fill = PatternFill(start_color="2B5799", end_color="2B5799", fill_type="solid")
     header_font = Font(color="FFFFFF", bold=True)
 
@@ -1149,6 +1150,9 @@ def export_excel(store_id: int | None = None):
             contracts_val = "、".join(json.loads(r.get("contract_types") or "[]"))
         except Exception:
             contracts_val = ""
+        price_val   = r.get("price", "") or ""
+        deposit_val = r.get("deposit", "") or ""
+        price_with_deposit = f"{price_val}({deposit_val})" if deposit_val else price_val
         ws.cell(row=row_idx, column=1,  value=r.get("store_code", ""))
         ws.cell(row=row_idx, column=2,  value=r.get("store_name", ""))
         ws.cell(row=row_idx, column=3,  value=r.get("original_filename", ""))
@@ -1157,10 +1161,11 @@ def export_excel(store_id: int | None = None):
         ws.cell(row=row_idx, column=6,  value=r.get("non_device_category", ""))
         ws.cell(row=row_idx, column=7,  value=carriers_val)
         ws.cell(row=row_idx, column=8,  value=contracts_val)
-        ws.cell(row=row_idx, column=9,  value=r.get("price", ""))
-        ws.cell(row=row_idx, column=10, value=r.get("note", ""))
-        ws.cell(row=row_idx, column=11, value=r.get("renamed_filename", ""))
-        ws.cell(row=row_idx, column=12, value=r.get("status", ""))
+        ws.cell(row=row_idx, column=9,  value=price_val)
+        ws.cell(row=row_idx, column=10, value=price_with_deposit)
+        ws.cell(row=row_idx, column=11, value=r.get("note", ""))
+        ws.cell(row=row_idx, column=12, value=r.get("renamed_filename", ""))
+        ws.cell(row=row_idx, column=13, value=r.get("status", ""))
 
     for col in ws.columns:
         max_len = max(len(str(cell.value or "")) for cell in col)
