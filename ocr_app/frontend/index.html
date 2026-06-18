@@ -1136,10 +1136,10 @@ function _fmtPrice(v) {
 }
 function _fmtPriceDeposit(price, deposit) {
   if (!price) return '';
-  const p = _fmtPrice(price);
-  if (!deposit) return p;
-  const d = Number(String(deposit).replace(/[,，\s]/g, ''));
-  return `${p}(${isNaN(d) ? deposit : d.toLocaleString()})`;
+  const p    = _fmtPrice(price);
+  const rawD = deposit ? String(deposit).replace(/[,，\s]/g, '') : '0';
+  const d    = Number(rawD);
+  return `${p}(${isNaN(d) ? rawD : d.toLocaleString()})`;
 }
 
 const STATUS_ORDER = { pending:0, skip:1, error:2, analyzing:3, analyzed:4, confirmed:5, done:6 };
