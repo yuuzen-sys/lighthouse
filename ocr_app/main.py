@@ -354,7 +354,19 @@ def import_stores(data: StoreImport):
 def list_stores():
     with get_conn() as conn:
         rows = conn.execute("SELECT * FROM stores ORDER BY code").fetchall()
-    return [dict(r) for r in rows]
+        result = []
+        for row in rows:
+            d = dict(row)
+            counts = conn.execute(
+                """SELECT COUNT(*) as total,
+                          SUM(CASE WHEN status = 'done' THEN 1 ELSE 0 END) as done
+                   FROM photos WHERE store_id = ?""",
+                (row["id"],)
+            ).fetchone()
+            d["photo_total"] = counts["total"] or 0
+            d["photo_done"]  = counts["done"]  or 0
+            result.append(d)
+    return result
 
 
 @app.delete("/api/stores/{store_id}")
