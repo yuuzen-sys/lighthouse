@@ -561,6 +561,7 @@ def _auto_register_device(name: str, category: str | None):
 _WIN_INVALID = str.maketrans({
     "\\": "_", "/": "_", ":": "：", "*": "＊",
     "?": "？", '"': "'", "<": "＜", ">": "＞", "|": "｜",
+    "（": "(", "）": ")",
 })
 
 
@@ -627,12 +628,13 @@ def _build_renamed_new(code: str, store_name: str,
     prefix = f"【{code}】{store_name}" if code else (store_name or "")
 
     if non_dev_cat:
-        if non_dev_cat in non_pop_categories:
+        if non_dev_cat in pop_categories:
+            # pop_categories 優先: POP(名前) + キャリアタグ
+            tag = f"POP({non_dev_cat})"
+        else:
             # POP以外: キャリアタグ付加なし、カテゴリ名そのもの
             full = f"{prefix} {non_dev_cat}".strip()
             return _sanitize_filename(full) + suffix
-        # 端末POP以外のPOP
-        tag = f"POP({non_dev_cat})"
     else:
         tag = _pop_tag(device, price, rename_tags, device_groups, contracts)
         if not tag:
@@ -1164,7 +1166,11 @@ def export_excel(store_id: int | None = None):
             contracts_val = ""
         price_val   = r.get("price", "") or ""
         deposit_val = r.get("deposit", "") or ""
-        price_with_deposit = f"{price_val}({deposit_val})" if deposit_val else price_val
+        if price_val:
+            d = deposit_val if deposit_val else "0"
+            price_with_deposit = f"{price_val}({d})"
+        else:
+            price_with_deposit = ""
         ws.cell(row=row_idx, column=1,  value=r.get("store_code", ""))
         ws.cell(row=row_idx, column=2,  value=r.get("store_name", ""))
         ws.cell(row=row_idx, column=3,  value=r.get("original_filename", ""))

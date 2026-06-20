@@ -1004,8 +1004,14 @@ let _renameParts   = [];   // accumulated tag segments for multi-tag rename
 let filterPanelOpen = false;
 
 // 店舗コードから暗黙キャリアを返す（量販以外の DS/au/SB 系店舗用）
-const _CODE_TO_CARRIER = { 'DS':'ドコモ', '出DS':'ドコモ', 'au':'au', '出au':'au', 'SB':'SB', '出SB':'SB' };
-function _implicitCarrier(storeCode) { return _CODE_TO_CARRIER[storeCode] || null; }
+// 前方一致: DS01, 出DS01, au01, 出au01, SB01, 出SB01 等に対応
+function _implicitCarrier(storeCode) {
+  if (!storeCode) return null;
+  if (storeCode.startsWith('出DS') || storeCode.startsWith('DS')) return 'ドコモ';
+  if (storeCode.startsWith('出au') || storeCode.startsWith('au')) return 'au';
+  if (storeCode.startsWith('出SB') || storeCode.startsWith('SB')) return 'SB';
+  return null;
+}
 
 const GROUP_META = {
   'iPhone':  ['最新iPhone', '中古iPhone'],
@@ -1951,12 +1957,13 @@ function _computeTagSeg() {
 
   let tag = '';
   if (nonDevCat) {
-    if (nonPopCats.includes(nonDevCat)) {
+    if (popCats.includes(nonDevCat)) {
+      // pop_categories に含まれる → POP(名前) + キャリアタグ
+      tag = `POP(${nonDevCat})`;
+    } else {
       // POP以外: キャリアタグなし、カテゴリ名そのまま
       return nonDevCat;
     }
-    // 端末POP以外のPOP
-    tag = `POP(${nonDevCat})`;
   } else if (device) {
     if (renameTags[device]) {
       tag = renameTags[device];
@@ -1986,12 +1993,15 @@ function _computeTagSeg() {
   return parts.join(' ');
 }
 
+function _toHalfParen(s) { return s.replace(/（/g, '(').replace(/）/g, ')'); }
+
 function _buildRenamePreview() {
   const prefix = _storePrefix();
   const seg    = _computeTagSeg();
-  if (!seg) return prefix;
+  if (!seg) return _toHalfParen(prefix);
   const body = getSelectedContracts().includes('新規') ? `${seg} 新規契約あり` : seg;
-  return prefix ? `${prefix} ${body}` : body;
+  const full = prefix ? `${prefix} ${body}` : body;
+  return _toHalfParen(full);
 }
 
 function _refreshRenameDisplay() {
