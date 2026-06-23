@@ -544,7 +544,7 @@ class PhotoUpdate(BaseModel):
     carriers: list[str] | None = None
     contract_types: list[str] | None = None
     non_device_category: str | None = None
-    extra_items: list[dict] | None = None  # [{device, price, deposit, contracts}]
+    extra_items: list[dict] | None = None  # [{carrier, price, deposit}] キャリア別金額
 
 
 def _auto_register_device(name: str, category: str | None):
@@ -636,45 +636,27 @@ def _build_renamed_new(code: str, store_name: str,
                        carriers: list[str], contracts: list[str],
                        rename_tags: dict, device_groups: dict,
                        pop_categories: list, non_pop_categories: list,
-                       suffix: str,
-                       extra_items: list[dict] | None = None) -> str:
+                       suffix: str) -> str:
     """
-    分類ツリーに基づくリネーム（複数アイテム対応）:
+    分類ツリーに基づくリネーム:
       POP以外          → 【code】店舗名 カテゴリ名.ext  (キャリアタグなし)
       端末POP以外のPOP → 【code】店舗名 [carrier]POP(カテゴリ).ext
       端末割引POP      → 【code】店舗名 [carrier]割引POPI/POPA/etc.ext  (price あり)
       その他の端末POP  → 【code】店舗名 [carrier]POPI/POPA.ext           (price なし)
-    extra_items の各アイテムのタグを結合する。キャリアは全アイテム共通。
+    extra_items (キャリア別金額) はリネームに影響しない。
     """
     prefix = f"【{code}】{store_name}" if code else (store_name or "")
 
-    all_parts: list[str] = []
-    has_shinki = "新規" in (contracts or [])
-
-    # 主アイテム
-    all_parts.extend(_item_tag_parts(
+    parts = _item_tag_parts(
         device, non_dev_cat, price, contracts, carriers,
         rename_tags, device_groups, pop_categories, non_pop_categories
-    ))
+    )
 
-    # 追加アイテム
-    for item in (extra_items or []):
-        dev   = item.get("device") or ""
-        ndc   = item.get("non_device_category") or ""
-        pr    = item.get("price") or ""
-        contr = item.get("contracts") or []
-        if "新規" in contr:
-            has_shinki = True
-        all_parts.extend(_item_tag_parts(
-            dev, ndc, pr, contr, carriers,
-            rename_tags, device_groups, pop_categories, non_pop_categories
-        ))
-
-    if not all_parts:
+    if not parts:
         return _sanitize_filename(prefix) + suffix
 
-    body = " ".join(all_parts)
-    if has_shinki:
+    body = " ".join(parts)
+    if "新規" in (contracts or []):
         body += " 新規契約あり"
     full = f"{prefix} {body}".strip()
     return _sanitize_filename(full) + suffix
@@ -743,7 +725,6 @@ def confirm_photo(photo_id: int, req: ConfirmRequest = ConfirmRequest()):
             code, store, device, non_dev, price,
             carriers, contracts, rename_tags, device_groups,
             pop_categories, non_pop_categories, suffix,
-            extra_items=extra_items,
         )
 
     with get_conn() as conn:

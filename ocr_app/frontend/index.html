@@ -427,7 +427,7 @@
         </div>
         <!-- 追加端末アイテム -->
         <div id="extra-items-container"></div>
-        <button type="button" id="add-extra-item-btn" onclick="addExtraItem()">＋ 端末を追加</button>
+        <button type="button" id="add-extra-item-btn" onclick="addExtraItem()">＋ キャリア別金額を追加</button>
         <div class="form-group">
           <label>備考</label>
           <textarea id="f-note" rows="2" placeholder="任意メモ"></textarea>
@@ -1388,6 +1388,8 @@ function _extraDeviceSelectHtml(selected) {
   return html;
 }
 
+const _ALL_CARRIERS = ['ドコモ','au','UQ','SB','Y!','楽天'];
+
 function renderExtraItems() {
   const container = document.getElementById('extra-items-container');
   if (!container) return;
@@ -1395,76 +1397,63 @@ function renderExtraItems() {
   container.innerHTML = _extraItems.map((item, idx) => `
     <div class="extra-item-card" data-extra-idx="${idx}">
       <div class="extra-item-hdr">
-        <span>端末 ${idx + 2}</span>
+        <span>キャリア別金額 ${idx + 2}</span>
         <button type="button" onclick="removeExtraItem(${idx})">×</button>
       </div>
       <div style="margin-bottom:5px">
-        <label style="font-size:11px;color:#666;display:block;margin-bottom:2px">機種名</label>
-        <select class="extra-device" style="width:100%;padding:4px 6px;border:1px solid #ccc;border-radius:5px;font-size:13px" onchange="updateRenamePreview()">
-          ${_extraDeviceSelectHtml(item.device||'')}
+        <label style="font-size:11px;color:#666;display:block;margin-bottom:2px">キャリア</label>
+        <select class="extra-carrier" style="width:100%;padding:4px 6px;border:1px solid #ccc;border-radius:5px;font-size:13px">
+          <option value="">— 選択 —</option>
+          ${_ALL_CARRIERS.map(c => `<option value="${c}"${c===item.carrier?' selected':''}>${c}</option>`).join('')}
         </select>
       </div>
       <div style="margin-bottom:5px">
         <label style="font-size:11px;color:#666;display:block;margin-bottom:2px">金額（円）</label>
         <input type="text" class="extra-price" value="${_esc(item.price||'')}" placeholder="例: 87384"
-               style="width:100%;padding:4px 6px;border:1px solid #ccc;border-radius:5px;font-size:13px;box-sizing:border-box" oninput="updateRenamePreview()">
-      </div>
-      <div style="margin-bottom:5px">
-        <label style="font-size:11px;color:#666;display:block;margin-bottom:2px">頭金（円）</label>
-        <input type="text" class="extra-deposit" value="${_esc(item.deposit||'')}" placeholder="未記載なら0円"
                style="width:100%;padding:4px 6px;border:1px solid #ccc;border-radius:5px;font-size:13px;box-sizing:border-box">
       </div>
       <div>
-        <label style="font-size:11px;color:#666;display:block;margin-bottom:2px">契約種別</label>
-        <div class="toggle-group" style="gap:4px;flex-wrap:wrap">
-          ${['MNP','機種変更','新規'].map(c => `
-            <button type="button" class="toggle-btn contract extra-contract${(item.contracts||[]).includes(c)?' active':''}"
-                    data-contract="${c}" onclick="toggleExtraContract(this)">${c}</button>
-          `).join('')}
-        </div>
+        <label style="font-size:11px;color:#666;display:block;margin-bottom:2px">頭金（円）</label>
+        <input type="text" class="extra-deposit" value="${_esc(item.deposit||'')}" placeholder="未記載なら0円"
+               style="width:100%;padding:4px 6px;border:1px solid #ccc;border-radius:5px;font-size:13px;box-sizing:border-box">
       </div>
     </div>
   `).join('');
 }
 
 function addExtraItem() {
-  _extraItems.push({ device: '', price: '', deposit: '', contracts: [] });
+  _extraItems.push({ carrier: '', price: '', deposit: '' });
   renderExtraItems();
-  updateRenamePreview();
 }
 
 function removeExtraItem(idx) {
   _extraItems.splice(idx, 1);
   renderExtraItems();
-  updateRenamePreview();
-}
-
-function toggleExtraContract(btn) {
-  btn.classList.toggle('active');
-  updateRenamePreview();
 }
 
 function _getAllExtraItemsFromDom() {
   const items = [];
   document.querySelectorAll('.extra-item-card').forEach(el => {
-    const device    = el.querySelector('.extra-device')?.value || '';
-    const price     = (el.querySelector('.extra-price')?.value   || '').replace(/[,，\s]/g, '');
-    const deposit   = (el.querySelector('.extra-deposit')?.value || '').replace(/[,，\s]/g, '');
-    const contracts = [...el.querySelectorAll('.extra-contract.active')].map(b => b.dataset.contract);
-    if (device) items.push({ device, price, deposit, contracts });
+    const carrier = el.querySelector('.extra-carrier')?.value || '';
+    const price   = (el.querySelector('.extra-price')?.value   || '').replace(/[,，\s]/g, '');
+    const deposit = (el.querySelector('.extra-deposit')?.value || '').replace(/[,，\s]/g, '');
+    if (carrier || price) items.push({ carrier, price, deposit });
   });
   return items;
 }
 
 function _fmtAllPrices(p) {
-  const prices = [];
-  if (p.price) prices.push(_fmtPriceDeposit(p.price, p.deposit));
+  const parts = [];
+  if (p.price) parts.push(_fmtPriceDeposit(p.price, p.deposit));
   try {
     JSON.parse(p.items_json || '[]').forEach(i => {
-      if (i.price) prices.push(_fmtPriceDeposit(i.price, i.deposit));
+      if (i.price) {
+        const label = i.carrier ? `${i.carrier}:` : '';
+        parts.push(label + _fmtPriceDeposit(i.price, i.deposit));
+      }
     });
   } catch {}
-  return prices.join(' / ');
+  return parts.join(' / ');
 }
 
 function _onDeviceChange() {
@@ -2120,28 +2109,10 @@ function _computeTagSeg() {
   );
 }
 
-// 追加アイテム1件（カード DOM から読む）
-function _computeExtraItemSeg(itemEl) {
-  return _computeTagSegFrom(
-    itemEl.querySelector('.extra-device')?.value || '',
-    '',
-    '',
-    (itemEl.querySelector('.extra-price')?.value || '').replace(/[,，\s]/g, ''),
-    getSelectedCarriers(),
-    [...itemEl.querySelectorAll('.extra-contract.active')].map(b => b.dataset.contract)
-  );
-}
-
-// 全アイテムのセグメント配列
+// 全アイテムのセグメント配列（追加アイテムはキャリア別金額のみ → リネームに影響しない）
 function _computeAllTagSegs() {
-  const segs = [];
   const s0 = _computeTagSeg();
-  if (s0) segs.push(s0);
-  document.querySelectorAll('.extra-item-card').forEach(el => {
-    const s = _computeExtraItemSeg(el);
-    if (s) segs.push(s);
-  });
-  return segs;
+  return s0 ? [s0] : [];
 }
 
 function _toHalfParen(s) { return s.replace(/（/g, '(').replace(/）/g, ')'); }
@@ -2150,9 +2121,7 @@ function _buildRenamePreview() {
   const prefix = _storePrefix();
   const segs   = _computeAllTagSegs();
   if (!segs.length) return _toHalfParen(prefix);
-  const hasNewContract = getSelectedContracts().includes('新規') ||
-    [...document.querySelectorAll('.extra-contract.active')].some(b => b.dataset.contract === '新規');
-  const body = hasNewContract ? `${segs.join(' ')} 新規契約あり` : segs.join(' ');
+  const body = getSelectedContracts().includes('新規') ? `${segs.join(' ')} 新規契約あり` : segs.join(' ');
   return _toHalfParen(prefix ? `${prefix} ${body}` : body);
 }
 
