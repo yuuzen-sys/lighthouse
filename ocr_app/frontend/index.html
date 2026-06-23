@@ -55,6 +55,11 @@
   .lock-badge { position:absolute; bottom:5px; left:5px; background:rgba(220,38,38,0.85); color:white; font-size:10px; font-weight:600; padding:2px 7px; border-radius:10px; pointer-events:none; white-space:nowrap; max-width:calc(100% - 10px); overflow:hidden; text-overflow:ellipsis; }
   #lock-banner { display:none; background:#fef2f2; border-bottom:2px solid #dc2626; color:#dc2626; font-weight:600; font-size:13px; padding:8px 16px; text-align:center; flex-shrink:0; }
   @keyframes pulse-blue { 0%,100%{border-color:#3b82f6} 50%{border-color:#93c5fd} }
+  .extra-item-card { border:1px solid #c5d8ef; border-radius:8px; padding:10px; margin-top:8px; background:#f8fbff; }
+  .extra-item-hdr { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; font-size:12px; font-weight:600; color:#5a7fab; }
+  .extra-item-hdr button { border:none; background:none; color:#e57373; cursor:pointer; font-size:15px; padding:0 2px; line-height:1; }
+  #add-extra-item-btn { margin-top:8px; width:100%; padding:7px; border:1px dashed #7a9cc8; border-radius:6px; background:none; color:#5a7fab; cursor:pointer; font-size:13px; }
+  #add-extra-item-btn:hover { background:#eef4fc; }
   .photo-thumb { width: 100%; height: 130px; object-fit: cover; object-position: 60% 15%; display: block; }
   .photo-info { padding: 7px 8px; }
   .photo-name { font-size: 10px; color: #888; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -420,6 +425,9 @@
           <label>頭金（円）</label>
           <input type="text" id="f-deposit" placeholder="未記載なら0円">
         </div>
+        <!-- 追加端末アイテム -->
+        <div id="extra-items-container"></div>
+        <button type="button" id="add-extra-item-btn" onclick="addExtraItem()">＋ 端末を追加</button>
         <div class="form-group">
           <label>備考</label>
           <textarea id="f-note" rows="2" placeholder="任意メモ"></textarea>
@@ -737,6 +745,7 @@ let panX = 0, panY = 0;
 let isPanning = false, panStartX = 0, panStartY = 0, didPan = false;
 let _lockReadOnly   = false;
 let _heartbeatTimer = null;
+let _extraItems     = [];  // [{device, price, deposit, contracts}]
 
 // ── Auth ───────────────────────────────────────────────────────────────────
 async function initAuth() {
@@ -1027,7 +1036,10 @@ function _deviceGroup(p) {
 function _filteredPhotos() {
   return photos.filter(p => {
     if (filterStatus    && p.status !== filterStatus)         return false;
-    if (filterDevice    && p.device_name !== filterDevice)    return false;
+    if (filterDevice && p.device_name !== filterDevice) {
+      try { if (!JSON.parse(p.items_json || '[]').some(i => i.device === filterDevice)) return false; }
+      catch { return false; }
+    }
     if (filterNonDevCat && p.non_device_category !== filterNonDevCat) return false;
     if (filterCarriers.length) {
       const implicit = _implicitCarrier(p.store_code);
@@ -1193,7 +1205,7 @@ function _renderFilteredGrid() {
         ${filterPanelOpen && p.store_code ? `<div style="font-size:9px;color:#7a9cc8;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:1px">[${_esc(p.store_code)}] ${_esc(p.store_name||'')}</div>` : ''}
         <div class="photo-name" title="${_esc(p.renamed_filename || p.original_filename)}">${_esc(p.renamed_filename || p.original_filename)}</div>
         <div class="photo-device">${_esc(p.device_name || p.non_device_category || '')}</div>
-        <div class="photo-price">${_fmtPriceDeposit(p.price, p.deposit)}</div>
+        <div class="photo-price">${_fmtAllPrices(p)}</div>
         <span class="status-chip chip-${p.status}">${statusLabel(p.status)}</span>
       </div>
     </div>`;
@@ -1343,6 +1355,116 @@ function rebuildDeviceSelect() {
   });
 
   sel.value = prev || '';
+
+  // 追加アイテムのセレクトも更新
+  document.querySelectorAll('.extra-device').forEach(s => {
+    const v = s.value;
+    s.innerHTML = _extraDeviceSelectHtml(v);
+    s.value = v;
+  });
+}
+
+// ── Extra items ───────────────────────────────────────────────────────────────
+
+function _extraDeviceSelectHtml(selected) {
+  let html = '<option value="">— 選択なし —</option>';
+  const allDevices = [...new Set(Object.values(candidates.devices || {}).flat())].sort();
+  const groupMap   = candidates.device_groups || {};
+  const byGroup    = {};
+  DEVICE_GROUPS.forEach(g => { byGroup[g] = []; });
+  allDevices.forEach(d => {
+    const g = groupMap[d] || '未振り分け';
+    (byGroup[g] = byGroup[g] || []).push(d);
+  });
+  DEVICE_GROUPS.forEach(g => {
+    const devs = byGroup[g];
+    if (!devs || !devs.length) return;
+    html += `<optgroup label="${_esc(g)}">`;
+    devs.forEach(d => {
+      html += `<option value="${_esc(d)}"${d === selected ? ' selected' : ''}>${_esc(d)}</option>`;
+    });
+    html += '</optgroup>';
+  });
+  return html;
+}
+
+function renderExtraItems() {
+  const container = document.getElementById('extra-items-container');
+  if (!container) return;
+  if (!_extraItems.length) { container.innerHTML = ''; return; }
+  container.innerHTML = _extraItems.map((item, idx) => `
+    <div class="extra-item-card" data-extra-idx="${idx}">
+      <div class="extra-item-hdr">
+        <span>端末 ${idx + 2}</span>
+        <button type="button" onclick="removeExtraItem(${idx})">×</button>
+      </div>
+      <div style="margin-bottom:5px">
+        <label style="font-size:11px;color:#666;display:block;margin-bottom:2px">機種名</label>
+        <select class="extra-device" style="width:100%;padding:4px 6px;border:1px solid #ccc;border-radius:5px;font-size:13px" onchange="updateRenamePreview()">
+          ${_extraDeviceSelectHtml(item.device||'')}
+        </select>
+      </div>
+      <div style="margin-bottom:5px">
+        <label style="font-size:11px;color:#666;display:block;margin-bottom:2px">金額（円）</label>
+        <input type="text" class="extra-price" value="${_esc(item.price||'')}" placeholder="例: 87384"
+               style="width:100%;padding:4px 6px;border:1px solid #ccc;border-radius:5px;font-size:13px;box-sizing:border-box" oninput="updateRenamePreview()">
+      </div>
+      <div style="margin-bottom:5px">
+        <label style="font-size:11px;color:#666;display:block;margin-bottom:2px">頭金（円）</label>
+        <input type="text" class="extra-deposit" value="${_esc(item.deposit||'')}" placeholder="未記載なら0円"
+               style="width:100%;padding:4px 6px;border:1px solid #ccc;border-radius:5px;font-size:13px;box-sizing:border-box">
+      </div>
+      <div>
+        <label style="font-size:11px;color:#666;display:block;margin-bottom:2px">契約種別</label>
+        <div class="toggle-group" style="gap:4px;flex-wrap:wrap">
+          ${['MNP','機種変更','新規'].map(c => `
+            <button type="button" class="toggle-btn contract extra-contract${(item.contracts||[]).includes(c)?' active':''}"
+                    data-contract="${c}" onclick="toggleExtraContract(this)">${c}</button>
+          `).join('')}
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function addExtraItem() {
+  _extraItems.push({ device: '', price: '', deposit: '', contracts: [] });
+  renderExtraItems();
+  updateRenamePreview();
+}
+
+function removeExtraItem(idx) {
+  _extraItems.splice(idx, 1);
+  renderExtraItems();
+  updateRenamePreview();
+}
+
+function toggleExtraContract(btn) {
+  btn.classList.toggle('active');
+  updateRenamePreview();
+}
+
+function _getAllExtraItemsFromDom() {
+  const items = [];
+  document.querySelectorAll('.extra-item-card').forEach(el => {
+    const device    = el.querySelector('.extra-device')?.value || '';
+    const price     = (el.querySelector('.extra-price')?.value   || '').replace(/[,，\s]/g, '');
+    const deposit   = (el.querySelector('.extra-deposit')?.value || '').replace(/[,，\s]/g, '');
+    const contracts = [...el.querySelectorAll('.extra-contract.active')].map(b => b.dataset.contract);
+    if (device) items.push({ device, price, deposit, contracts });
+  });
+  return items;
+}
+
+function _fmtAllPrices(p) {
+  const prices = [];
+  if (p.price) prices.push(_fmtPriceDeposit(p.price, p.deposit));
+  try {
+    JSON.parse(p.items_json || '[]').forEach(i => {
+      if (i.price) prices.push(_fmtPriceDeposit(i.price, i.deposit));
+    });
+  } catch {}
+  return prices.join(' / ');
 }
 
 function _onDeviceChange() {
@@ -1433,6 +1555,10 @@ async function openPhotoModal(photoId) {
   document.getElementById('f-deposit').value = photo.deposit || '';
   document.getElementById('f-note').value = photo.note || '';
   document.getElementById('rename-preview').textContent = photo.renamed_filename || '';
+
+  // 追加アイテム復元
+  try { _extraItems = JSON.parse(photo.items_json || '[]'); } catch { _extraItems = []; }
+  renderExtraItems();
   document.getElementById('device-cands').innerHTML = '';
   document.getElementById('price-cands').innerHTML = '';
   document.getElementById('raw-box').textContent = '';
@@ -1474,6 +1600,7 @@ function closePhotoModal() {
     apiFetch(`/api/photos/${relId}/lock`, { method: 'DELETE' }).catch(() => {});
   }
   _lockReadOnly = false;
+  _extraItems   = [];
   document.getElementById('photo-modal').classList.add('hidden');
   document.getElementById('lock-banner').style.display = 'none';
   loadPhotos(currentStoreId);
@@ -1585,6 +1712,7 @@ async function savePhoto() {
     price:   document.getElementById('f-price').value.replace(/[,，\s]/g, '')   || null,
     deposit: document.getElementById('f-deposit').value.replace(/[,，\s]/g, '') || null,
     note: document.getElementById('f-note').value || null,
+    extra_items: _getAllExtraItemsFromDom(),
   };
   await apiFetch(`/api/photos/${currentPhotoId}`, {
     method: 'PUT',
@@ -1939,49 +2067,36 @@ function _storePrefix() {
   return code ? `【${code}】${name}` : name;
 }
 
-function _computeTagSeg() {
-  // Returns just the carrier+tag part (no store prefix, no 新規) for current form state
-  const devVal    = document.getElementById('f-device')?.value || '';
-  const nonDevCat = document.getElementById('f-non-device-cat')?.value || '';
-  const manualDev = document.getElementById('f-device-manual')?.value?.trim() || '';
-  const device    = devVal === '__non_device__' ? '' :
-                    devVal === '__manual__'     ? manualDev : devVal;
-  const price     = (document.getElementById('f-price')?.value || '').replace(/[,，\s]/g, '');
-  const carriers  = getSelectedCarriers();
-
+// コアロジック: 値を直接受け取ってタグ文字列を返す
+function _computeTagSegFrom(devVal, manualDev, nonDevCat, price, carriers, contracts) {
+  const device = devVal === '__non_device__' ? '' :
+                 devVal === '__manual__'     ? manualDev : devVal;
   const renameTags   = candidates.rename_tags   || {};
   const deviceGroups = candidates.device_groups || {};
-
-  const popCats    = candidates.pop_categories     || [];
-  const nonPopCats = candidates.non_pop_categories || [];
+  const popCats      = candidates.pop_categories     || [];
 
   let tag = '';
   if (nonDevCat) {
     if (popCats.includes(nonDevCat)) {
-      // pop_categories に含まれる → POP(名前) + キャリアタグ
       tag = `POP(${nonDevCat})`;
     } else {
-      // POP以外: キャリアタグなし、カテゴリ名そのまま
-      return nonDevCat;
+      return nonDevCat;  // POP以外: キャリアタグなし
     }
   } else if (device) {
     if (renameTags[device]) {
       tag = renameTags[device];
     } else {
-      const grp       = deviceGroups[device] || '未振り分け';
-      const contracts = getSelectedContracts();
+      const grp = deviceGroups[device] || '未振り分け';
       if (grp === '廉価（中華）Android') {
         tag = price
           ? (contracts.includes('新規') ? '割引POP中華A' : '割引POPA')
           : 'POPA';
       } else if (price) {
-        // 端末割引POP
         if (grp === '中古iPhone')        tag = '中古端末割引POPI';
         else if (grp === '中古Android')  tag = '中古端末割引POPA';
         else if (grp.includes('iPhone')) tag = '割引POPI';
         else                             tag = '割引POPA';
       } else {
-        // その他の端末POP
         tag = grp.includes('iPhone') ? 'POPI' : 'POPA';
       }
     }
@@ -1993,15 +2108,52 @@ function _computeTagSeg() {
   return parts.join(' ');
 }
 
+// 主アイテム（フォーム DOM から読む）
+function _computeTagSeg() {
+  return _computeTagSegFrom(
+    document.getElementById('f-device')?.value || '',
+    document.getElementById('f-device-manual')?.value?.trim() || '',
+    document.getElementById('f-non-device-cat')?.value || '',
+    (document.getElementById('f-price')?.value || '').replace(/[,，\s]/g, ''),
+    getSelectedCarriers(),
+    getSelectedContracts()
+  );
+}
+
+// 追加アイテム1件（カード DOM から読む）
+function _computeExtraItemSeg(itemEl) {
+  return _computeTagSegFrom(
+    itemEl.querySelector('.extra-device')?.value || '',
+    '',
+    '',
+    (itemEl.querySelector('.extra-price')?.value || '').replace(/[,，\s]/g, ''),
+    getSelectedCarriers(),
+    [...itemEl.querySelectorAll('.extra-contract.active')].map(b => b.dataset.contract)
+  );
+}
+
+// 全アイテムのセグメント配列
+function _computeAllTagSegs() {
+  const segs = [];
+  const s0 = _computeTagSeg();
+  if (s0) segs.push(s0);
+  document.querySelectorAll('.extra-item-card').forEach(el => {
+    const s = _computeExtraItemSeg(el);
+    if (s) segs.push(s);
+  });
+  return segs;
+}
+
 function _toHalfParen(s) { return s.replace(/（/g, '(').replace(/）/g, ')'); }
 
 function _buildRenamePreview() {
   const prefix = _storePrefix();
-  const seg    = _computeTagSeg();
-  if (!seg) return _toHalfParen(prefix);
-  const body = getSelectedContracts().includes('新規') ? `${seg} 新規契約あり` : seg;
-  const full = prefix ? `${prefix} ${body}` : body;
-  return _toHalfParen(full);
+  const segs   = _computeAllTagSegs();
+  if (!segs.length) return _toHalfParen(prefix);
+  const hasNewContract = getSelectedContracts().includes('新規') ||
+    [...document.querySelectorAll('.extra-contract.active')].some(b => b.dataset.contract === '新規');
+  const body = hasNewContract ? `${segs.join(' ')} 新規契約あり` : segs.join(' ');
+  return _toHalfParen(prefix ? `${prefix} ${body}` : body);
 }
 
 function _refreshRenameDisplay() {
@@ -2032,9 +2184,9 @@ function updateRenamePreview() {
 }
 
 function addRenameSegment() {
-  const seg = _computeTagSeg();
-  if (!seg) { toast('機種名またはキャリアを選択してください'); return; }
-  _renameParts.push(seg);
+  const segs = _computeAllTagSegs();
+  if (!segs.length) { toast('機種名またはキャリアを選択してください'); return; }
+  _renameParts.push(...segs);
   _refreshRenameDisplay();
 }
 

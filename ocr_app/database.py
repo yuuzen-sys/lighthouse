@@ -25,6 +25,8 @@ def _migrate(conn):
         conn.execute("ALTER TABLE photos ADD COLUMN non_device_category TEXT")
     if "deposit" not in cols:
         conn.execute("ALTER TABLE photos ADD COLUMN deposit TEXT")
+    if "items_json" not in cols:
+        conn.execute("ALTER TABLE photos ADD COLUMN items_json TEXT")
 
 
 def init_db():

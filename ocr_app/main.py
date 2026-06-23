@@ -544,6 +544,7 @@ class PhotoUpdate(BaseModel):
     carriers: list[str] | None = None
     contract_types: list[str] | None = None
     non_device_category: str | None = None
+    extra_items: list[dict] | None = None  # [{device, price, deposit, contracts}]
 
 
 def _auto_register_device(name: str, category: str | None):
@@ -612,38 +613,68 @@ def _pop_tag(device: str, price: str,
         return "POPA"
 
 
+def _item_tag_parts(device: str, non_dev_cat: str, price: str,
+                    contracts: list[str], carriers: list[str],
+                    rename_tags: dict, device_groups: dict,
+                    pop_categories: list, non_pop_categories: list) -> list[str]:
+    """1アイテムのタグ部品リストを返す。非POPカテゴリはキャリアなしで1要素。"""
+    if non_dev_cat:
+        if non_dev_cat in pop_categories:
+            tag = f"POP({non_dev_cat})"
+        else:
+            return [non_dev_cat]
+    else:
+        tag = _pop_tag(device, price, rename_tags, device_groups, contracts)
+        if not tag:
+            return []
+    ordered = [c for c in CARRIER_ORDER if c in set(carriers or [])]
+    return [f"{CARRIER_SYM[c]}{tag}" for c in ordered] if ordered else [tag]
+
+
 def _build_renamed_new(code: str, store_name: str,
                        device: str, non_dev_cat: str, price: str,
                        carriers: list[str], contracts: list[str],
                        rename_tags: dict, device_groups: dict,
                        pop_categories: list, non_pop_categories: list,
-                       suffix: str) -> str:
+                       suffix: str,
+                       extra_items: list[dict] | None = None) -> str:
     """
-    分類ツリーに基づくリネーム:
+    分類ツリーに基づくリネーム（複数アイテム対応）:
       POP以外          → 【code】店舗名 カテゴリ名.ext  (キャリアタグなし)
       端末POP以外のPOP → 【code】店舗名 [carrier]POP(カテゴリ).ext
       端末割引POP      → 【code】店舗名 [carrier]割引POPI/POPA/etc.ext  (price あり)
       その他の端末POP  → 【code】店舗名 [carrier]POPI/POPA.ext           (price なし)
+    extra_items の各アイテムのタグを結合する。キャリアは全アイテム共通。
     """
     prefix = f"【{code}】{store_name}" if code else (store_name or "")
 
-    if non_dev_cat:
-        if non_dev_cat in pop_categories:
-            # pop_categories 優先: POP(名前) + キャリアタグ
-            tag = f"POP({non_dev_cat})"
-        else:
-            # POP以外: キャリアタグ付加なし、カテゴリ名そのもの
-            full = f"{prefix} {non_dev_cat}".strip()
-            return _sanitize_filename(full) + suffix
-    else:
-        tag = _pop_tag(device, price, rename_tags, device_groups, contracts)
-        if not tag:
-            return _sanitize_filename(prefix) + suffix
+    all_parts: list[str] = []
+    has_shinki = "新規" in (contracts or [])
 
-    ordered = [c for c in CARRIER_ORDER if c in set(carriers or [])]
-    parts   = [f"{CARRIER_SYM[c]}{tag}" for c in ordered] if ordered else [tag]
-    body    = " ".join(parts)
-    if "新規" in (contracts or []):
+    # 主アイテム
+    all_parts.extend(_item_tag_parts(
+        device, non_dev_cat, price, contracts, carriers,
+        rename_tags, device_groups, pop_categories, non_pop_categories
+    ))
+
+    # 追加アイテム
+    for item in (extra_items or []):
+        dev   = item.get("device") or ""
+        ndc   = item.get("non_device_category") or ""
+        pr    = item.get("price") or ""
+        contr = item.get("contracts") or []
+        if "新規" in contr:
+            has_shinki = True
+        all_parts.extend(_item_tag_parts(
+            dev, ndc, pr, contr, carriers,
+            rename_tags, device_groups, pop_categories, non_pop_categories
+        ))
+
+    if not all_parts:
+        return _sanitize_filename(prefix) + suffix
+
+    body = " ".join(all_parts)
+    if has_shinki:
         body += " 新規契約あり"
     full = f"{prefix} {body}".strip()
     return _sanitize_filename(full) + suffix
@@ -657,15 +688,16 @@ def update_photo(photo_id: int, data: PhotoUpdate):
 
     carriers_json       = json.dumps(data.carriers,       ensure_ascii=False) if data.carriers       is not None else None
     contract_types_json = json.dumps(data.contract_types, ensure_ascii=False) if data.contract_types is not None else None
+    items_json          = json.dumps(data.extra_items,    ensure_ascii=False) if data.extra_items    else None
     with get_conn() as conn:
         conn.execute(
             """UPDATE photos
                SET device_name = ?, device_category = ?, price = ?, deposit = ?, note = ?,
-                   carriers = ?, contract_types = ?, non_device_category = ?,
+                   carriers = ?, contract_types = ?, non_device_category = ?, items_json = ?,
                    status = 'confirmed', updated_at = CURRENT_TIMESTAMP
                WHERE id = ?""",
             (data.device_name, data.device_category, data.price, data.deposit, data.note,
-             carriers_json, contract_types_json, data.non_device_category, photo_id)
+             carriers_json, contract_types_json, data.non_device_category, items_json, photo_id)
         )
     return {"ok": True}
 
@@ -687,20 +719,21 @@ def confirm_photo(photo_id: int, req: ConfirmRequest = ConfirmRequest()):
         if not row:
             raise HTTPException(404, "Photo not found")
 
-    photo     = dict(row)
-    code      = photo.get("store_code") or ""
-    store     = photo.get("store_name") or ""
-    device    = photo.get("device_name") or ""
-    non_dev   = photo.get("non_device_category") or ""
-    price     = photo.get("price") or ""
-    carriers  = json.loads(photo.get("carriers")  or "[]")
-    contracts = json.loads(photo.get("contract_types") or "[]")
-    suffix    = Path(photo["original_filename"]).suffix or ".jpg"
+    photo       = dict(row)
+    code        = photo.get("store_code") or ""
+    store       = photo.get("store_name") or ""
+    device      = photo.get("device_name") or ""
+    non_dev     = photo.get("non_device_category") or ""
+    price       = photo.get("price") or ""
+    carriers    = json.loads(photo.get("carriers")      or "[]")
+    contracts   = json.loads(photo.get("contract_types") or "[]")
+    extra_items = json.loads(photo.get("items_json")    or "[]")
+    suffix      = Path(photo["original_filename"]).suffix or ".jpg"
 
-    cands            = _load_candidates()
-    rename_tags      = cands.get("rename_tags", {})
-    device_groups    = cands.get("device_groups", {})
-    pop_categories   = cands.get("pop_categories", [])
+    cands              = _load_candidates()
+    rename_tags        = cands.get("rename_tags", {})
+    device_groups      = cands.get("device_groups", {})
+    pop_categories     = cands.get("pop_categories", [])
     non_pop_categories = cands.get("non_pop_categories", [])
 
     if req.renamed_filename:
@@ -710,6 +743,7 @@ def confirm_photo(photo_id: int, req: ConfirmRequest = ConfirmRequest()):
             code, store, device, non_dev, price,
             carriers, contracts, rename_tags, device_groups,
             pop_categories, non_pop_categories, suffix,
+            extra_items=extra_items,
         )
 
     with get_conn() as conn:
