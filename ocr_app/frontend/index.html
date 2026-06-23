@@ -425,9 +425,15 @@
           <label>頭金（円）</label>
           <input type="text" id="f-deposit" placeholder="未記載なら0円">
         </div>
-        <!-- 追加端末アイテム -->
+        <!-- キャリア別金額 -->
         <div id="extra-items-container"></div>
         <button type="button" id="add-extra-item-btn" onclick="addExtraItem()">＋ キャリア別金額を追加</button>
+        <!-- 追加機種（同一POP複数機種・検索用） -->
+        <div id="extra-devices-container"></div>
+        <button type="button" id="add-extra-device-btn" onclick="addExtraDevice()"
+                style="margin-top:6px;width:100%;padding:7px;border:1px dashed #a5b4c8;border-radius:6px;background:none;color:#7a9cc8;cursor:pointer;font-size:13px">
+          ＋ 追加機種を登録（同一POP複数機種）
+        </button>
         <div class="form-group">
           <label>備考</label>
           <textarea id="f-note" rows="2" placeholder="任意メモ"></textarea>
@@ -745,7 +751,8 @@ let panX = 0, panY = 0;
 let isPanning = false, panStartX = 0, panStartY = 0, didPan = false;
 let _lockReadOnly   = false;
 let _heartbeatTimer = null;
-let _extraItems     = [];  // [{device, price, deposit, contracts}]
+let _extraItems   = [];  // [{carrier, price, deposit}] キャリア別金額
+let _extraDevices = [];  // [{device}] 同一POP追加機種（検索用・リネーム不変）
 
 // ── Auth ───────────────────────────────────────────────────────────────────
 async function initAuth() {
@@ -1356,8 +1363,8 @@ function rebuildDeviceSelect() {
 
   sel.value = prev || '';
 
-  // 追加アイテムのセレクトも更新
-  document.querySelectorAll('.extra-device').forEach(s => {
+  // 追加機種セレクトも更新
+  document.querySelectorAll('.extra-device-select').forEach(s => {
     const v = s.value;
     s.innerHTML = _extraDeviceSelectHtml(v);
     s.value = v;
@@ -1431,13 +1438,48 @@ function removeExtraItem(idx) {
   renderExtraItems();
 }
 
+function renderExtraDevices() {
+  const container = document.getElementById('extra-devices-container');
+  if (!container) return;
+  if (!_extraDevices.length) { container.innerHTML = ''; return; }
+  container.innerHTML = _extraDevices.map((item, idx) => `
+    <div class="extra-item-card extra-device-card" data-dev-idx="${idx}"
+         style="background:#f5f8f2;border-color:#b8d4b0">
+      <div class="extra-item-hdr" style="color:#4a7a42">
+        <span>追加機種 ${idx + 1}</span>
+        <button type="button" onclick="removeExtraDevice(${idx})">×</button>
+      </div>
+      <select class="extra-device-select"
+              style="width:100%;padding:4px 6px;border:1px solid #ccc;border-radius:5px;font-size:13px">
+        ${_extraDeviceSelectHtml(item.device||'')}
+      </select>
+    </div>
+  `).join('');
+}
+
+function addExtraDevice() {
+  _extraDevices.push({ device: '' });
+  renderExtraDevices();
+}
+
+function removeExtraDevice(idx) {
+  _extraDevices.splice(idx, 1);
+  renderExtraDevices();
+}
+
 function _getAllExtraItemsFromDom() {
   const items = [];
-  document.querySelectorAll('.extra-item-card').forEach(el => {
+  // キャリア別金額
+  document.querySelectorAll('.extra-item-card:not(.extra-device-card)').forEach(el => {
     const carrier = el.querySelector('.extra-carrier')?.value || '';
     const price   = (el.querySelector('.extra-price')?.value   || '').replace(/[,，\s]/g, '');
     const deposit = (el.querySelector('.extra-deposit')?.value || '').replace(/[,，\s]/g, '');
-    if (carrier || price) items.push({ carrier, price, deposit });
+    if (carrier || price) items.push({ type: 'price', carrier, price, deposit });
+  });
+  // 追加機種（検索用）
+  document.querySelectorAll('.extra-device-card').forEach(el => {
+    const device = el.querySelector('.extra-device-select')?.value || '';
+    if (device) items.push({ type: 'device', device });
   });
   return items;
 }
@@ -1446,7 +1488,7 @@ function _fmtAllPrices(p) {
   const parts = [];
   if (p.price) parts.push(_fmtPriceDeposit(p.price, p.deposit));
   try {
-    JSON.parse(p.items_json || '[]').forEach(i => {
+    JSON.parse(p.items_json || '[]').filter(i => !i.type || i.type === 'price').forEach(i => {
       if (i.price) {
         const label = i.carrier ? `${i.carrier}:` : '';
         parts.push(label + _fmtPriceDeposit(i.price, i.deposit));
@@ -1545,9 +1587,14 @@ async function openPhotoModal(photoId) {
   document.getElementById('f-note').value = photo.note || '';
   document.getElementById('rename-preview').textContent = photo.renamed_filename || '';
 
-  // 追加アイテム復元
-  try { _extraItems = JSON.parse(photo.items_json || '[]'); } catch { _extraItems = []; }
+  // 追加アイテム復元（type で分類）
+  try {
+    const all = JSON.parse(photo.items_json || '[]');
+    _extraItems   = all.filter(i => !i.type || i.type === 'price');
+    _extraDevices = all.filter(i => i.type === 'device');
+  } catch { _extraItems = []; _extraDevices = []; }
   renderExtraItems();
+  renderExtraDevices();
   document.getElementById('device-cands').innerHTML = '';
   document.getElementById('price-cands').innerHTML = '';
   document.getElementById('raw-box').textContent = '';
@@ -1590,6 +1637,7 @@ function closePhotoModal() {
   }
   _lockReadOnly = false;
   _extraItems   = [];
+  _extraDevices = [];
   document.getElementById('photo-modal').classList.add('hidden');
   document.getElementById('lock-banner').style.display = 'none';
   loadPhotos(currentStoreId);
