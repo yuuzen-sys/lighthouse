@@ -1,0 +1,1969 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>新聞管理システム</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: "Meiryo", "Yu Gothic", sans-serif; font-size: 16px; background: #f0f2f5; color: #222; }
+
+header { background: #1a3a5c; color: #fff; padding: 0 20px; height: 48px; display: flex; align-items: center; position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 6px rgba(0,0,0,.3); }
+header h1 { font-size: 17px; font-weight: bold; }
+
+nav.tabs { display: flex; background: #f8f9fa; border-bottom: 2px solid #1a3a5c; padding: 0 12px; gap: 2px; position: sticky; top: 48px; z-index: 99; }
+nav.tabs button { padding: 10px 20px; border: none; background: none; cursor: pointer; font-size: 15px; font-family: inherit; color: #555; border-bottom: 3px solid transparent; margin-bottom: -2px; transition: .15s; }
+nav.tabs button:hover { color: #1a3a5c; }
+nav.tabs button.active { color: #1a3a5c; font-weight: bold; border-bottom-color: #1a3a5c; }
+
+main { padding: 20px; max-width: 1100px; margin: 0 auto; }
+.tab-panel { display: none; }
+.tab-panel.active { display: block; }
+
+.card { background: #fff; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,.12); padding: 16px 20px; margin-bottom: 16px; }
+.card-title { font-size: 17px; font-weight: bold; color: #1a3a5c; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid #e0e0e0; display: flex; align-items: center; justify-content: space-between; }
+
+.btn { padding: 7px 16px; border: none; border-radius: 5px; cursor: pointer; font-family: inherit; font-size: 15px; transition: opacity .15s; }
+.btn:hover { opacity: .85; }
+.btn-primary   { background: #1a3a5c; color: #fff; }
+.btn-success   { background: #2e7d32; color: #fff; }
+.btn-danger    { background: #c62828; color: #fff; }
+.btn-warning   { background: #e65100; color: #fff; }
+.btn-secondary { background: #78909c; color: #fff; }
+.btn-sm  { padding: 5px 12px; font-size: 13px; }
+.btn-xs  { padding: 3px 9px; font-size: 12px; }
+
+.form-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; margin-bottom: 12px; }
+.form-group { display: flex; flex-direction: column; gap: 3px; }
+.form-group label { font-size: 13px; color: #555; font-weight: 600; }
+.form-group input, .form-group select, .form-group textarea { padding: 7px 10px; border: 1px solid #ccc; border-radius: 4px; font-family: inherit; font-size: 15px; }
+.form-group input:focus, .form-group select:focus { outline: none; border-color: #1a3a5c; box-shadow: 0 0 0 2px rgba(26,58,92,.15); }
+
+.tbl-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 15px; }
+td, th { white-space: nowrap; }
+thead th { background: #1a3a5c; color: #fff; padding: 10px 12px; text-align: left; font-size: 15px; }
+tbody tr:nth-child(even) { background: #f5f8fb; }
+tbody tr:hover { background: #e8f0f8; }
+td { padding: 9px 12px; border-bottom: 1px solid #eee; vertical-align: middle; font-size: 15px; }
+
+.tag { display: inline-block; padding: 3px 10px; border-radius: 10px; font-size: 13px; font-weight: bold; margin: 1px; }
+.tag-active   { background: #e8f5e9; color: #2e7d32; border: 1px solid #a5d6a7; }
+.tag-inactive { background: #fce4ec; color: #c62828; border: 1px solid #ef9a9a; }
+.tag-no-coll  { background: #fff3e0; color: #e65100; border: 1px solid #ffcc80; }
+.tag-cash     { background: #fff3e0; color: #e65100; border: 1px solid #ffcc80; }
+.tag-transfer { background: #e3f2fd; color: #1565c0; border: 1px solid #90caf9; }
+
+.modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 200; align-items: center; justify-content: center; }
+.modal-overlay.open { display: flex; }
+.modal { background: #fff; border-radius: 10px; padding: 24px; width: 560px; max-width: 95vw; max-height: 90vh; overflow-y: auto; box-shadow: 0 8px 32px rgba(0,0,0,.25); }
+.modal h2 { font-size: 18px; color: #1a3a5c; margin-bottom: 16px; }
+.modal-footer { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+
+.flex-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.text-muted { color: #888; font-size: 13px; }
+.mt8 { margin-top: 8px; }
+.empty { text-align: center; color: #aaa; padding: 20px; font-size: 13px; }
+.number-cell { text-align: right; }
+.positive { color: #2e7d32; font-weight: bold; }
+.negative { color: #c62828; font-weight: bold; }
+
+/* 担当者カード */
+.staff-card { border: 1px solid #ddd; border-radius: 8px; margin-bottom: 16px; overflow: hidden; }
+.staff-card-header { padding: 10px 16px; display: flex; align-items: center; gap: 10px; color: #fff; }
+.staff-card-body { padding: 12px 16px; }
+.section-label { font-size: 12px; font-weight: 600; color: #555; margin-bottom: 6px; margin-top: 10px; }
+
+/* 援助金明細 */
+.subsidy-block { margin-bottom: 20px; }
+.subsidy-name { background: #e3f2fd; border-left: 4px solid #1a3a5c; padding: 8px 14px; font-weight: bold; font-size: 14px; display: flex; align-items: center; justify-content: space-between; border-radius: 0 4px 0 0; }
+.subsidy-total { color: #1a3a5c; font-size: 16px; }
+.adj-row { background: #fff9c4 !important; }
+
+/* 設定 */
+.price-section { margin-bottom: 20px; }
+.price-header { font-weight: bold; font-size: 15px; color: #fff; padding: 9px 16px; display: flex; justify-content: space-between; align-items: center; }
+.price-table { width: 100%; border-collapse: collapse; font-size: 13px; border: 1px solid #ddd; }
+.price-table th { background: #eceff1; color: #37474f; padding: 8px 12px; text-align: left; font-size: 14px; border-bottom: 1px solid #ddd; }
+.price-table td { padding: 8px 12px; border-top: 1px solid #eee; font-size: 14px; }
+.price-add-row { display: flex; gap: 6px; align-items: center; padding: 8px 10px; background: #fafafa; border: 1px solid #ddd; border-top: none; border-radius: 0 0 4px 4px; flex-wrap: wrap; }
+.price-add-row input { padding: 4px 6px; border: 1px solid #ccc; border-radius: 3px; font-size: 12px; font-family: inherit; }
+
+/* 新聞マスタテーブル */
+.np-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.np-table th { background: #eceff1; color: #37474f; padding: 8px 12px; text-align: left; border-bottom: 2px solid #ddd; }
+.np-table td { padding: 8px 12px; border-bottom: 1px solid #eee; vertical-align: middle; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>📰 新聞管理システム</h1>
+</header>
+
+<nav class="tabs">
+  <button class="active" onclick="switchTab('readers',this)">読者管理</button>
+  <button onclick="switchTab('staff',this)">担当者管理</button>
+  <button onclick="switchTab('settings',this)">新聞管理</button>
+  <button onclick="switchTab('subsidies',this)">帳票</button>
+</nav>
+
+<main>
+
+<!-- ════ 読者管理 ════ -->
+<div id="tab-readers" class="tab-panel active">
+  <div class="card">
+    <div class="card-title">
+      読者一覧
+      <button class="btn btn-primary btn-sm" onclick="openReaderModal()">＋ 新規登録</button>
+    </div>
+    <div class="flex-row" style="margin-bottom:10px;">
+      <input id="reader-search" type="text" placeholder="名前・住所で検索…" style="padding:5px 8px;border:1px solid #ccc;border-radius:4px;width:200px;font-size:13px;" oninput="renderReaders()">
+      <select id="reader-course-filter" style="padding:5px 8px;border:1px solid #ccc;border-radius:4px;font-size:13px;" onchange="renderReaders()">
+        <option value="">コースで絞り込み（全て）</option>
+      </select>
+      <span class="text-muted" id="reader-count"></span>
+    </div>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>名前</th><th>住所</th><th>購読</th><th>配達担当</th><th>集金担当</th><th>備考</th><th>操作</th></tr></thead>
+        <tbody id="reader-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ════ 担当者管理 ════ -->
+<div id="tab-staff" class="tab-panel">
+  <div class="card">
+    <div class="card-title">
+      担当者一覧
+      <button class="btn btn-primary btn-sm" onclick="openStaffModal()">＋ 新規登録</button>
+    </div>
+    <div class="flex-row" style="margin-bottom:12px;align-items:center;gap:6px;font-size:13px;">
+      <span style="color:#555;">表示月：</span>
+      <select id="staff-view-y" style="padding:3px 6px;border:1px solid #ccc;border-radius:4px;font-size:13px;"></select>年
+      <select id="staff-view-m" style="padding:3px 6px;border:1px solid #ccc;border-radius:4px;font-size:13px;"></select>月
+      <button class="btn btn-secondary btn-sm" onclick="renderStaff()">更新</button>
+      <span id="staff-view-label" style="color:#888;font-size:12px;"></span>
+    </div>
+    <div id="staff-list"></div>
+  </div>
+  <div class="card">
+    <div class="card-title">
+      コース管理
+      <button class="btn btn-primary btn-sm" onclick="openCourseModal()">＋ コース追加</button>
+    </div>
+    <p class="text-muted" style="margin-bottom:12px;">HコースとNコースを個別に管理します。各コースに担当者・略称・単価・所属読者を設定できます。</p>
+    <div id="course-list"></div>
+  </div>
+</div>
+
+<!-- ════ 帳票 ════ -->
+<div id="tab-subsidies" class="tab-panel">
+  <div class="card">
+    <div class="card-title">帳票</div>
+    <div class="flex-row" style="margin-bottom:14px;">
+      <div class="form-group"><label>年</label><input type="number" id="sub-year" style="width:78px;" min="2000" max="2099"></div>
+      <div class="form-group">
+        <label>月</label>
+        <select id="sub-month" style="width:68px;">
+          <option value="1">1月</option><option value="2">2月</option><option value="3">3月</option>
+          <option value="4">4月</option><option value="5">5月</option><option value="6">6月</option>
+          <option value="7">7月</option><option value="8">8月</option><option value="9">9月</option>
+          <option value="10">10月</option><option value="11">11月</option><option value="12">12月</option>
+        </select>
+      </div>
+      <button class="btn btn-primary" onclick="loadSubsidies()">計算</button>
+    </div>
+    <div id="subsidy-content"></div>
+  </div>
+</div>
+
+<!-- ════ 新聞管理 ════ -->
+<div id="tab-settings" class="tab-panel">
+  <div class="card">
+    <div class="card-title">
+      新聞管理
+      <button class="btn btn-primary btn-sm" onclick="openNewspaperModal()">＋ 新聞を追加</button>
+    </div>
+    <p class="text-muted" style="margin-bottom:12px;">
+      購読する新聞の種類を管理します。略称は読者一覧への表示に使います。<br>
+      集金単価を設定した新聞は援助金計算の対象になります。
+    </p>
+    <div class="tbl-wrap">
+      <table class="np-table">
+        <thead>
+          <tr><th>新聞名</th><th>略称</th><th>コース種別</th><th>購読単価（円）</th><th>配達単価（円）</th><th>集金単価（円）</th><th>操作</th></tr>
+        </thead>
+        <tbody id="newspaper-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+</main>
+
+<!-- ════ Modal: 読者 ════ -->
+<div id="modal-reader" class="modal-overlay">
+  <div class="modal">
+    <h2 id="modal-reader-title">読者登録</h2>
+    <input type="hidden" id="reader-id">
+    <div class="form-grid">
+      <div class="form-group" style="grid-column:1/-1"><label>名前 *</label><input type="text" id="r-name"></div>
+      <div class="form-group" style="grid-column:1/-1"><label>住所</label><input type="text" id="r-address"></div>
+      <div class="form-group" style="grid-column:1/-1"><label>備考</label><input type="text" id="r-note"></div>
+    </div>
+    <div style="margin-bottom:12px;">
+      <div style="font-size:13px;font-weight:600;color:#555;margin-bottom:8px;">購読情報</div>
+      <div id="sub-editor"></div>
+      <div class="flex-row mt8" id="sub-add-buttons"></div>
+    </div>
+    <div id="r-sub-history-section" style="margin-bottom:14px;display:none;">
+      <div style="font-size:13px;font-weight:600;color:#555;margin-bottom:8px;">購読履歴</div>
+      <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:8px;">
+        <thead>
+          <tr style="background:#f0f0f0;">
+            <th style="padding:4px 6px;text-align:left;border:1px solid #ddd;">新聞</th>
+            <th style="padding:4px 6px;text-align:center;border:1px solid #ddd;">開始年月</th>
+            <th style="padding:4px 6px;text-align:center;border:1px solid #ddd;">終了年月</th>
+            <th style="padding:4px 6px;text-align:center;border:1px solid #ddd;">部数</th>
+            <th style="padding:4px 6px;text-align:center;border:1px solid #ddd;">状態</th>
+            <th style="padding:4px 6px;border:1px solid #ddd;"></th>
+          </tr>
+        </thead>
+        <tbody id="r-sub-history-tbody"></tbody>
+      </table>
+      <div style="background:#f8f8f8;padding:8px;border-radius:4px;font-size:12px;">
+        <div style="font-weight:600;margin-bottom:6px;color:#555;">履歴を追加</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:4px;">
+          <select id="rsh-np" style="padding:3px 6px;border:1px solid #ccc;border-radius:3px;font-size:12px;"></select>
+          <input type="number" id="rsh-sy" placeholder="開始年" style="width:64px;font-size:12px;padding:2px 6px;border:1px solid #ccc;border-radius:3px;">年
+          <select id="rsh-sm" style="font-size:12px;padding:2px 4px;border:1px solid #ccc;border-radius:3px;"></select>月〜
+          <input type="number" id="rsh-ey" placeholder="終了年" style="width:64px;font-size:12px;padding:2px 6px;border:1px solid #ccc;border-radius:3px;">年
+          <select id="rsh-em" style="font-size:12px;padding:2px 4px;border:1px solid #ccc;border-radius:3px;"></select>月
+          <span style="font-size:11px;color:#aaa;">（空欄=現在も有効）</span>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;">
+          <label style="font-size:12px;">部数<input type="number" id="rsh-qty" value="1" min="1" style="width:44px;font-size:12px;padding:2px 4px;border:1px solid #ccc;border-radius:3px;margin-left:4px;"></label>
+          <select id="rsh-status" style="font-size:12px;padding:2px 6px;border:1px solid #ccc;border-radius:3px;">
+            <option value="active">購読中</option>
+            <option value="inactive">休止中</option>
+          </select>
+          <select id="rsh-pay" style="font-size:12px;padding:2px 6px;border:1px solid #ccc;border-radius:3px;">
+            <option value="cash">現金</option>
+            <option value="transfer">振込等</option>
+          </select>
+          <button class="btn btn-success btn-sm" onclick="addSubHistory()">追加</button>
+        </div>
+      </div>
+    </div>
+    <div id="r-course-section" style="margin-bottom:14px;">
+      <div style="font-size:13px;font-weight:600;color:#555;margin-bottom:8px;">所属コース</div>
+      <div id="r-course-list" style="margin-bottom:8px;"></div>
+      <div class="flex-row" id="r-course-add-row">
+        <select id="r-course-sel" style="flex:1;padding:6px 8px;border:1px solid #ccc;border-radius:4px;font-size:14px;font-family:inherit;"></select>
+        <button class="btn btn-success btn-sm" onclick="addReaderToCourseFromModal()">追加</button>
+      </div>
+    </div>
+    <div id="r-delivery-section" style="margin-bottom:14px;display:none;">
+      <div style="font-size:13px;font-weight:600;color:#555;margin-bottom:6px;">配達担当（新聞ごと）</div>
+      <div style="margin-bottom:8px;font-size:12px;color:#666;">
+        適用開始月：<select id="r-del-s-y" style="font-size:12px;padding:2px;"></select>年
+        <select id="r-del-s-m" style="font-size:12px;padding:2px;"></select>月
+      </div>
+      <div id="r-delivery-list" style="margin-bottom:8px;"></div>
+    </div>
+    <div id="r-collection-section" style="margin-bottom:14px;display:none;">
+      <div style="font-size:13px;font-weight:600;color:#555;margin-bottom:6px;">集金担当</div>
+      <div style="margin-bottom:8px;font-size:12px;color:#666;">
+        適用開始月：<select id="r-col-s-y" style="font-size:12px;padding:2px;"></select>年
+        <select id="r-col-s-m" style="font-size:12px;padding:2px;"></select>月
+      </div>
+      <div id="r-collection-list"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modal-reader')">キャンセル</button>
+      <button class="btn btn-primary" onclick="saveReader()">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════ Modal: 担当者 ════ -->
+<div id="modal-staff" class="modal-overlay">
+  <div class="modal">
+    <h2 id="modal-staff-title">担当者登録</h2>
+    <input type="hidden" id="staff-id">
+    <div class="form-grid">
+      <div class="form-group" style="grid-column:1/-1"><label>名前 *</label><input type="text" id="s-name"></div>
+      <div class="form-group"><label>連絡先</label><input type="text" id="s-contact"></div>
+      <div class="form-group" style="grid-column:1/-1"><label>備考</label><input type="text" id="s-note"></div>
+    </div>
+    <div class="form-group" style="margin-bottom:10px;">
+      <label>役割（複数選択可）</label>
+      <div class="flex-row" style="margin-top:4px;">
+        <label style="display:flex;align-items:center;gap:4px;font-size:13px;cursor:pointer;"><input type="checkbox" id="s-deliverer"> 配達担当</label>
+        <label style="display:flex;align-items:center;gap:4px;font-size:13px;cursor:pointer;"><input type="checkbox" id="s-collector"> 集金担当</label>
+      </div>
+    </div>
+    <div id="s-delivery-section" style="display:none;margin-bottom:14px;">
+      <div style="font-size:13px;font-weight:600;color:#555;margin-bottom:6px;">個別配達担当先</div>
+      <div style="margin-bottom:6px;font-size:12px;color:#666;">
+        適用開始月：<select id="s-del-s-y" style="font-size:12px;padding:2px;"></select>年
+        <select id="s-del-s-m" style="font-size:12px;padding:2px;"></select>月
+      </div>
+      <div id="s-delivery-list"></div>
+    </div>
+    <div id="s-collection-section" style="display:none;margin-bottom:14px;">
+      <div style="font-size:13px;font-weight:600;color:#555;margin-bottom:6px;">集金担当先</div>
+      <div style="margin-bottom:6px;font-size:12px;color:#666;">
+        適用開始月：<select id="s-col-s-y" style="font-size:12px;padding:2px;"></select>年
+        <select id="s-col-s-m" style="font-size:12px;padding:2px;"></select>月
+      </div>
+      <div id="s-collection-list"></div>
+    </div>
+    <div id="s-history-section" style="display:none;margin-bottom:14px;">
+      <div style="font-size:13px;font-weight:600;color:#555;margin-bottom:8px;">担当履歴</div>
+      <div id="s-history-content"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modal-staff')">キャンセル</button>
+      <button class="btn btn-primary" onclick="saveStaff()">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════ Modal: 新聞 ════ -->
+<div id="modal-newspaper" class="modal-overlay">
+  <div class="modal">
+    <h2 id="modal-newspaper-title">新聞登録</h2>
+    <input type="hidden" id="np-id">
+    <div class="form-grid">
+      <div class="form-group" style="grid-column:1/-1"><label>新聞名 *</label><input type="text" id="np-name" placeholder="例: 日刊紙、日曜版、後援会紙"></div>
+      <div class="form-group">
+        <label>略称（読者一覧用・2〜4文字）</label>
+        <input type="text" id="np-short" maxlength="6" placeholder="例: H, N, K, H電">
+      </div>
+      <div class="form-group" style="grid-column:1/-1;">
+        <label>版種</label>
+        <div class="flex-row" style="margin-top:4px;gap:0;">
+          <button type="button" id="np-print-btn"
+            onclick="setNpEdition(1)"
+            style="padding:8px 20px;border:2px solid #1565c0;border-radius:5px 0 0 5px;background:#1565c0;color:#fff;font-family:inherit;font-size:14px;cursor:pointer;">
+            📰 紙版（配達あり）
+          </button>
+          <button type="button" id="np-digital-btn"
+            onclick="setNpEdition(0)"
+            style="padding:8px 20px;border:2px solid #ccc;border-radius:0 5px 5px 0;background:#fff;color:#555;font-family:inherit;font-size:14px;cursor:pointer;">
+            💻 電子版（配達なし）
+          </button>
+        </div>
+        <input type="hidden" id="np-is-print" value="1">
+        <p id="np-edition-note" class="text-muted" style="margin-top:4px;font-size:12px;">紙版：配達担当者の割り当て・コース所属の対象になります。</p>
+      </div>
+      <div class="form-group">
+        <label>コース種別（コース所属の判定）</label>
+        <select id="np-type">
+          <option value="">なし（コース不要）</option>
+          <option value="H">H（日刊紙系）</option>
+          <option value="N">N（日曜版系）</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>表示順（小さいほど上）</label>
+        <input type="number" id="np-order" min="0" value="0">
+      </div>
+    </div>
+
+    <!-- 価格履歴（編集時のみ表示） -->
+    <div id="np-price-section" style="display:none;margin-top:12px;">
+      <div style="font-size:13px;font-weight:600;color:#555;margin-bottom:8px;">価格履歴</div>
+      <table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:8px;">
+        <thead><tr style="background:#f5f5f5;">
+          <th style="padding:4px 6px;text-align:left;border:1px solid #ddd;">開始年月</th>
+          <th style="padding:4px 6px;text-align:left;border:1px solid #ddd;">終了年月</th>
+          <th style="padding:4px 6px;text-align:right;border:1px solid #ddd;">購読単価</th>
+          <th style="padding:4px 6px;text-align:right;border:1px solid #ddd;">配達単価</th>
+          <th style="padding:4px 6px;text-align:right;border:1px solid #ddd;">集金単価</th>
+          <th style="padding:4px 6px;border:1px solid #ddd;"></th>
+        </tr></thead>
+        <tbody id="np-price-tbody"></tbody>
+      </table>
+      <div style="background:#f9f9f9;border:1px solid #ddd;border-radius:4px;padding:10px;">
+        <div style="font-size:12px;color:#555;margin-bottom:6px;font-weight:600;">価格を追加</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;">
+          <div>
+            <div style="font-size:11px;color:#777;margin-bottom:2px;">開始年月 *</div>
+            <select id="npp-s-y" style="font-size:12px;padding:2px;"></select>年
+            <select id="npp-s-m" style="font-size:12px;padding:2px;"></select>月
+          </div>
+          <div>
+            <div style="font-size:11px;color:#777;margin-bottom:2px;">終了年月（空欄=現在も有効）</div>
+            <select id="npp-e-y" style="font-size:12px;padding:2px;opacity:0.4;" onclick="enableNpPriceEnd()"></select>年
+            <select id="npp-e-m" style="font-size:12px;padding:2px;opacity:0.4;" onclick="enableNpPriceEnd()"></select>月
+            <button type="button" onclick="clearNpPriceEnd()" style="font-size:11px;padding:1px 6px;border:1px solid #ccc;border-radius:3px;background:#fff;cursor:pointer;">クリア</button>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px;align-items:flex-end;">
+          <div>
+            <div style="font-size:11px;color:#777;margin-bottom:2px;">購読単価（円）</div>
+            <input type="number" id="npp-sub" min="0" placeholder="設定なし" style="width:90px;font-size:12px;padding:3px 6px;border:1px solid #ccc;border-radius:4px;">
+          </div>
+          <div>
+            <div style="font-size:11px;color:#777;margin-bottom:2px;">配達単価（円）</div>
+            <input type="number" id="npp-del" min="0" placeholder="援助なし" style="width:90px;font-size:12px;padding:3px 6px;border:1px solid #ccc;border-radius:4px;">
+          </div>
+          <div>
+            <div style="font-size:11px;color:#777;margin-bottom:2px;">集金単価（円）</div>
+            <input type="number" id="npp-unit" min="0" placeholder="集金なし" style="width:90px;font-size:12px;padding:3px 6px;border:1px solid #ccc;border-radius:4px;">
+          </div>
+          <button class="btn btn-success btn-sm" onclick="addNpPrice()">追加</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn btn-danger" id="np-delete-btn" onclick="deleteNewspaperFromModal()" style="margin-right:auto;display:none;">削除</button>
+      <button class="btn btn-secondary" onclick="closeModal('modal-newspaper')">キャンセル</button>
+      <button class="btn btn-primary" onclick="saveNewspaper()">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════ Modal: コース ════ -->
+<div id="modal-course" class="modal-overlay">
+  <div class="modal" style="width:600px;">
+    <h2 id="modal-course-title">コース登録</h2>
+    <input type="hidden" id="c-id">
+    <div class="form-grid">
+      <div class="form-group"><label>コース名 *</label><input type="text" id="c-name" placeholder="例: A団地、北ルート"></div>
+      <div class="form-group"><label>略称（読者一覧用・2〜3文字）</label><input type="text" id="c-short" maxlength="5" placeholder="例: A団、北"></div>
+      <div class="form-group">
+        <label>新聞種別 *</label>
+        <select id="c-type">
+          <option value="H">H（日刊紙）</option>
+          <option value="N">N（日曜版）</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>配達担当者 *</label>
+        <select id="c-staff" style="width:100%;"></select>
+      </div>
+      <div class="form-group" style="grid-column:1/-1"><label>備考</label><input type="text" id="c-note"></div>
+    </div>
+
+    <div id="c-extra-section" style="display:none;">
+      <div style="font-weight:600;font-size:14px;color:#37474f;margin:14px 0 6px;">単価履歴</div>
+      <table class="price-table">
+        <thead><tr><th>開始年月</th><th>終了年月</th><th>金額（円）</th><th>備考</th><th></th></tr></thead>
+        <tbody id="c-price-tbody"></tbody>
+      </table>
+      <div class="price-add-row" style="margin-top:0;">
+        <input type="number" id="c-py" placeholder="開始年" style="width:70px;">
+        <input type="number" id="c-pm" placeholder="月" min="1" max="12" style="width:48px;">
+        <span style="color:#888;">〜</span>
+        <input type="number" id="c-ey" placeholder="終了年（空=現在）" style="width:100px;">
+        <input type="number" id="c-em" placeholder="月" min="1" max="12" style="width:48px;">
+        <input type="number" id="c-amt" placeholder="金額" min="0" style="width:76px;">
+        <input type="text" id="c-pnote" placeholder="備考" style="width:80px;">
+        <button class="btn btn-primary btn-sm" onclick="addCoursePriceFromModal()">追加</button>
+      </div>
+
+      <div style="font-weight:600;font-size:14px;color:#37474f;margin:14px 0 6px;">所属読者</div>
+      <div id="c-reader-list" style="max-height:200px;overflow-y:auto;border:1px solid #eee;border-radius:4px;padding:4px 8px;margin-bottom:8px;"></div>
+      <div class="flex-row" id="c-reader-add-row" style="margin-bottom:4px;">
+        <select id="c-add-reader" style="flex:1;padding:6px 8px;border:1px solid #ccc;border-radius:4px;font-size:14px;font-family:inherit;"></select>
+        <button class="btn btn-success btn-sm" onclick="addReaderFromCourseModal()">追加</button>
+      </div>
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn btn-danger" id="c-delete-btn" onclick="deleteCourseFromModal()" style="margin-right:auto;display:none;">削除</button>
+      <button class="btn btn-secondary" onclick="closeModal('modal-course')">キャンセル</button>
+      <button class="btn btn-primary" onclick="saveCourse()">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════ Modal: 個別配達担当 ════ -->
+<div id="modal-delivery-assignments" class="modal-overlay">
+  <div class="modal" style="width:600px;">
+    <h2 id="modal-delivery-title">個別配達担当の設定</h2>
+    <p class="text-muted" style="margin-bottom:6px;font-size:12px;">コースに所属していない読者の個別配達担当を設定します。コース所属読者はコースの担当者が自動的に配達担当になります。</p>
+    <div style="margin-bottom:10px;font-size:12px;color:#555;">
+      適用開始月：<select id="da-s-y" style="font-size:12px;padding:2px;"></select>年
+      <select id="da-s-m" style="font-size:12px;padding:2px;"></select>月
+    </div>
+    <input type="hidden" id="delivery-assign-staff-id">
+    <div style="display:flex;gap:8px;margin-bottom:10px;align-items:center;flex-wrap:wrap;">
+      <input type="text" id="da-search" placeholder="名前・住所で絞り込み" oninput="renderDeliveryAssignLists()" style="flex:1;min-width:160px;padding:5px 8px;border:1px solid #ccc;border-radius:4px;font-size:13px;">
+      <div style="display:flex;gap:4px;">
+        <button id="da-f-all" class="btn btn-secondary btn-sm" onclick="setDaFilter('all')" style="font-weight:bold;">全て</button>
+        <button id="da-f-H" class="btn btn-secondary btn-sm" onclick="setDaFilter('H')">H紙</button>
+        <button id="da-f-N" class="btn btn-secondary btn-sm" onclick="setDaFilter('N')">N紙</button>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+      <div>
+        <div class="section-label">未担当の読者（紙版購読・コース未所属）</div>
+        <div id="delivery-assign-unselected" style="border:1px solid #ddd;border-radius:4px;max-height:320px;overflow-y:auto;"></div>
+      </div>
+      <div>
+        <div class="section-label">担当する読者 <span id="da-selected-count" style="font-weight:normal;color:#888;font-size:12px;"></span></div>
+        <div id="delivery-assign-selected" style="border:1px solid #ddd;border-radius:4px;max-height:320px;overflow-y:auto;"></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modal-delivery-assignments')">キャンセル</button>
+      <button class="btn btn-primary" onclick="saveDeliveryAssignments()">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════ Modal: 集金担当 ════ -->
+<div id="modal-assignments" class="modal-overlay">
+  <div class="modal" style="width:600px;">
+    <h2 id="modal-assignments-title">集金担当の設定</h2>
+    <div style="margin-bottom:10px;font-size:12px;color:#555;">
+      適用開始月：<select id="ca-s-y" style="font-size:12px;padding:2px;"></select>年
+      <select id="ca-s-m" style="font-size:12px;padding:2px;"></select>月
+    </div>
+    <input type="hidden" id="assign-staff-id">
+    <div style="display:flex;gap:8px;margin-bottom:10px;align-items:center;">
+      <input type="text" id="ca-search" placeholder="名前・住所で絞り込み" oninput="renderAssignLists()" style="flex:1;padding:5px 8px;border:1px solid #ccc;border-radius:4px;font-size:13px;">
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+      <div>
+        <div class="section-label">未担当の読者（現金払い）</div>
+        <div id="assign-unselected" style="border:1px solid #ddd;border-radius:4px;max-height:320px;overflow-y:auto;"></div>
+      </div>
+      <div>
+        <div class="section-label">担当する読者 <span id="ca-selected-count" style="font-weight:normal;color:#888;font-size:12px;"></span></div>
+        <div id="assign-selected" style="border:1px solid #ddd;border-radius:4px;max-height:320px;overflow-y:auto;"></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modal-assignments')">キャンセル</button>
+      <button class="btn btn-primary" onclick="saveAssignments()">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════ Modal: 調整 ════ -->
+<div id="modal-adj" class="modal-overlay">
+  <div class="modal">
+    <h2>援助金調整を追加</h2>
+    <div class="form-grid">
+      <div class="form-group"><label>担当者</label><select id="adj-staff-id"></select></div>
+      <div class="form-group">
+        <label>区分</label>
+        <select id="adj-role">
+          <option value="delivery">配達</option>
+          <option value="collection">集金</option>
+          <option value="other">その他</option>
+        </select>
+      </div>
+      <div class="form-group"><label>金額（円・マイナス可）</label><input type="number" id="adj-amount" value="0"></div>
+      <div class="form-group" style="grid-column:1/-1">
+        <label>備考（手伝い内容など）</label>
+        <input type="text" id="adj-note" placeholder="例: 田中さんのコースを手伝い">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modal-adj')">キャンセル</button>
+      <button class="btn btn-primary" onclick="saveAdj()">追加</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── State ──────────────────────────────────────────────────────────────────
+let readers = [], staffList = [], unitPrices = [], courses = [], newspapers = [];
+
+const FIXED_PRICE_CATS = [
+  { key: 'delivery_h', label: 'H配達単価（コース未所属）', color: '#1a3a5c' },
+  { key: 'delivery_n', label: 'N配達単価（コース未所属）', color: '#1a3a5c' },
+];
+
+// ── Init ──────────────────────────────────────────────────────────────────
+(async () => {
+  const now = new Date();
+  document.getElementById('sub-year').value = now.getFullYear();
+  document.getElementById('sub-month').value = now.getMonth() + 1;
+  await Promise.all([loadNewspapers(), loadReaders(), loadStaff(), loadUnitPrices(), loadCourses()]);
+})();
+
+// ── Tab ───────────────────────────────────────────────────────────────────
+function switchTab(name, btn) {
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('nav.tabs button').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  btn.classList.add('active');
+  if (name === 'settings') { loadNewspapers(); loadUnitPrices(); }
+  if (name === 'staff') { loadCourses(); }
+}
+
+// ── API ───────────────────────────────────────────────────────────────────
+async function api(method, path, body) {
+  const opts = { method, headers: { 'Content-Type': 'application/json' } };
+  if (body !== undefined) opts.body = JSON.stringify(body);
+  const res = await fetch('/api' + path, opts);
+  if (!res.ok) { const t = await res.text(); alert('エラー: ' + t); throw new Error(t); }
+  if (res.status === 204) return null;
+  return res.json();
+}
+const closeModal = id => document.getElementById(id).classList.remove('open');
+const openModal  = id => document.getElementById(id).classList.add('open');
+const esc = s => s ? String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;') : '';
+
+function populateMonthPicker(prefix, defY, defM) {
+  const now = new Date();
+  const dy = defY || now.getFullYear();
+  const dm = defM || (now.getMonth() + 1);
+  const yEl = document.getElementById(`${prefix}-y`);
+  const mEl = document.getElementById(`${prefix}-m`);
+  if (!yEl || !mEl) return;
+  yEl.innerHTML = Array.from({length: 11}, (_, i) => 2020 + i)
+    .map(y => `<option value="${y}"${y===dy?' selected':''}>${y}</option>`).join('');
+  mEl.innerHTML = Array.from({length: 12}, (_, i) => i + 1)
+    .map(m => `<option value="${m}"${m===dm?' selected':''}>${m}</option>`).join('');
+}
+function getMonthPicker(prefix) {
+  return {
+    start_year: parseInt(document.getElementById(`${prefix}-y`).value),
+    start_month: parseInt(document.getElementById(`${prefix}-m`).value),
+  };
+}
+
+// ── Newspapers ────────────────────────────────────────────────────────────
+async function loadNewspapers() {
+  newspapers = await api('GET', '/newspapers');
+  renderNewspaperTable();
+  renderSubAddButtons();
+}
+
+function renderNewspaperTable() {
+  const tbody = document.getElementById('newspaper-tbody');
+  if (!tbody) return;
+  const NP_TYPE = { H:'H（日刊紙系）', N:'N（日曜版系）', '':'なし' };
+  const fmtPrice = (v, empty='—') => (v !== null && v !== undefined) ? Number(v).toLocaleString()+'円' : `<span class="text-muted">${empty}</span>`;
+  tbody.innerHTML = newspapers.length === 0
+    ? `<tr><td colspan="8" class="empty">新聞が登録されていません</td></tr>`
+    : newspapers.map(n => {
+        const editionBadge = n.is_print
+          ? `<span style="background:#1565c0;color:#fff;border-radius:4px;padding:1px 7px;font-size:11px;font-weight:bold;">紙版</span>`
+          : `<span style="background:#2e7d32;color:#fff;border-radius:4px;padding:1px 7px;font-size:11px;font-weight:bold;">電子版</span>`;
+        return `<tr>
+          <td><b>${esc(n.name)}</b> ${editionBadge}</td>
+          <td><span style="background:#e0e0e0;color:#333;border-radius:4px;padding:2px 8px;font-size:13px;font-weight:bold;">${esc(n.short_name)}</span></td>
+          <td>${esc(NP_TYPE[n.newspaper_type||''] || 'なし')}</td>
+          <td class="number-cell">${fmtPrice(n.subscription_price, '設定なし')}</td>
+          <td class="number-cell">${n.is_print ? fmtPrice(n.delivery_price, '配達援助なし') : '<span class="text-muted">—（電子版）</span>'}</td>
+          <td class="number-cell">${fmtPrice(n.unit_price, '集金なし')}</td>
+
+          <td><button class="btn btn-secondary btn-xs" onclick="openNewspaperModal(${n.id})">編集</button></td>
+        </tr>`;
+      }).join('');
+}
+
+function renderSubAddButtons() {
+  const el = document.getElementById('sub-add-buttons');
+  if (!el) return;
+  el.innerHTML = newspapers.map(n =>
+    `<button class="btn btn-secondary btn-sm" onclick="addSubRow(${n.id})">${esc(n.short_name)}（${esc(n.name)}）を追加</button>`
+  ).join('');
+}
+
+function openNewspaperModal(id) {
+  const n = id ? newspapers.find(x => x.id === id) : null;
+  document.getElementById('modal-newspaper-title').textContent = n ? '新聞編集' : '新聞登録';
+  document.getElementById('np-id').value = n ? n.id : '';
+  document.getElementById('np-name').value = n ? n.name : '';
+  document.getElementById('np-short').value = n ? (n.short_name || '') : '';
+  document.getElementById('np-type').value = n ? (n.newspaper_type || '') : '';
+  setNpEdition(n ? (n.is_print ?? 1) : 1);
+  document.getElementById('np-order').value = n ? (n.sort_order || 0) : 0;
+  document.getElementById('np-delete-btn').style.display = n ? '' : 'none';
+  const priceSection = document.getElementById('np-price-section');
+  if (n) {
+    priceSection.style.display = '';
+    renderNpPriceHistory(n);
+    populateMonthPicker('npp-s');
+    populateMonthPicker('npp-e');
+    _npPriceEndEnabled = false;
+    document.getElementById('npp-e-y').style.opacity = '0.4';
+    document.getElementById('npp-e-m').style.opacity = '0.4';
+    document.getElementById('npp-sub').value = '';
+    document.getElementById('npp-del').value = '';
+    document.getElementById('npp-unit').value = '';
+  } else {
+    priceSection.style.display = 'none';
+  }
+  openModal('modal-newspaper');
+}
+
+function setNpEdition(isPrint) {
+  document.getElementById('np-is-print').value = isPrint ? 1 : 0;
+  const printBtn   = document.getElementById('np-print-btn');
+  const digitalBtn = document.getElementById('np-digital-btn');
+  const note       = document.getElementById('np-edition-note');
+  if (isPrint) {
+    printBtn.style.background   = '#1565c0'; printBtn.style.color = '#fff';   printBtn.style.borderColor = '#1565c0';
+    digitalBtn.style.background = '#fff';    digitalBtn.style.color = '#555'; digitalBtn.style.borderColor = '#ccc';
+    note.textContent = '紙版：配達担当者の割り当て・コース所属の対象になります。';
+  } else {
+    printBtn.style.background   = '#fff';    printBtn.style.color = '#555';   printBtn.style.borderColor = '#ccc';
+    digitalBtn.style.background = '#2e7d32'; digitalBtn.style.color = '#fff'; digitalBtn.style.borderColor = '#2e7d32';
+    note.textContent = '電子版：配達不要。コース所属・配達援助金の対象外になります。';
+  }
+}
+
+async function saveNewspaper() {
+  const id = document.getElementById('np-id').value;
+  const body = {
+    name: document.getElementById('np-name').value.trim(),
+    short_name: document.getElementById('np-short').value.trim(),
+    newspaper_type: document.getElementById('np-type').value || null,
+    is_print: parseInt(document.getElementById('np-is-print').value),
+    sort_order: parseInt(document.getElementById('np-order').value) || 0,
+  };
+  if (!body.name) { alert('新聞名は必須です'); return; }
+  if (id) await api('PUT', `/newspapers/${id}`, body);
+  else await api('POST', '/newspapers', body);
+  closeModal('modal-newspaper');
+  await loadNewspapers();
+  await loadReaders();
+}
+
+function renderNpPriceHistory(n) {
+  const fmtP = v => (v !== null && v !== undefined) ? Number(v).toLocaleString()+'円' : '<span class="text-muted">—</span>';
+  const tbody = document.getElementById('np-price-tbody');
+  if (!(n.prices||[]).length) {
+    tbody.innerHTML = '<tr><td colspan="6" style="padding:6px;color:#999;font-size:12px;">価格履歴なし</td></tr>';
+    return;
+  }
+  tbody.innerHTML = [...n.prices].reverse().map(p => `<tr>
+    <td style="padding:4px 6px;border:1px solid #ddd;">${p.start_year}年${p.start_month}月〜</td>
+    <td style="padding:4px 6px;border:1px solid #ddd;">${p.end_year ? p.end_year+'年'+p.end_month+'月' : '<span class="text-muted">現在</span>'}</td>
+    <td style="padding:4px 6px;border:1px solid #ddd;text-align:right;">${fmtP(p.subscription_price)}</td>
+    <td style="padding:4px 6px;border:1px solid #ddd;text-align:right;">${fmtP(p.delivery_price)}</td>
+    <td style="padding:4px 6px;border:1px solid #ddd;text-align:right;">${fmtP(p.unit_price)}</td>
+    <td style="padding:4px 6px;border:1px solid #ddd;">
+      <button class="btn btn-danger btn-xs" onclick="deleteNpPrice(${p.id})">削除</button>
+    </td>
+  </tr>`).join('');
+}
+
+let _npPriceEndEnabled = false;
+
+async function addNpPrice() {
+  const nid = document.getElementById('np-id').value;
+  if (!nid) return;
+  const { start_year, start_month } = getMonthPicker('npp-s');
+  const { start_year: end_year, start_month: end_month } = _npPriceEndEnabled
+    ? getMonthPicker('npp-e') : { start_year: null, start_month: null };
+  const subV  = document.getElementById('npp-sub').value.trim();
+  const delV  = document.getElementById('npp-del').value.trim();
+  const unitV = document.getElementById('npp-unit').value.trim();
+  const body = {
+    start_year, start_month,
+    end_year, end_month,
+    subscription_price: subV  !== '' ? parseInt(subV)  : null,
+    delivery_price:     delV  !== '' ? parseInt(delV)  : null,
+    unit_price:         unitV !== '' ? parseInt(unitV) : null,
+  };
+  await api('POST', `/newspapers/${nid}/prices`, body);
+  await loadNewspapers();
+  const n = newspapers.find(x => x.id === parseInt(nid));
+  if (n) renderNpPriceHistory(n);
+  ['npp-sub','npp-del','npp-unit'].forEach(id => document.getElementById(id).value = '');
+  _npPriceEndEnabled = false;
+  document.getElementById('npp-e-y').style.opacity = '0.4';
+  document.getElementById('npp-e-m').style.opacity = '0.4';
+}
+
+async function deleteNpPrice(pid) {
+  if (!confirm('この価格履歴を削除しますか？')) return;
+  await api('DELETE', `/newspaper-prices/${pid}`);
+  await loadNewspapers();
+  const nid = parseInt(document.getElementById('np-id').value);
+  const n = newspapers.find(x => x.id === nid);
+  if (n) renderNpPriceHistory(n);
+}
+
+function clearNpPriceEnd() {
+  _npPriceEndEnabled = false;
+  document.getElementById('npp-e-y').style.opacity = '0.4';
+  document.getElementById('npp-e-m').style.opacity = '0.4';
+}
+
+function enableNpPriceEnd() {
+  _npPriceEndEnabled = true;
+  document.getElementById('npp-e-y').style.opacity = '1';
+  document.getElementById('npp-e-m').style.opacity = '1';
+}
+
+async function deleteNewspaperFromModal() {
+  const id = document.getElementById('np-id').value;
+  if (!confirm('この新聞を削除しますか？関連する購読情報も削除されます。')) return;
+  await api('DELETE', `/newspapers/${id}`);
+  closeModal('modal-newspaper');
+  await Promise.all([loadNewspapers(), loadReaders()]);
+}
+
+// ── Courses ───────────────────────────────────────────────────────────────
+async function loadCourses() {
+  courses = await api('GET', '/courses');
+  renderCourseList();
+  updateCourseFilter();
+}
+
+function renderCourseList() {
+  const el = document.getElementById('course-list');
+  if (!el) return;
+  if (!courses.length) {
+    el.innerHTML = '<div class="empty">コースが登録されていません</div>';
+    return;
+  }
+  const hCourses = courses.filter(c => c.newspaper_type === 'H');
+  const nCourses = courses.filter(c => c.newspaper_type === 'N');
+  let html = '';
+  if (hCourses.length) {
+    html += `<div style="font-weight:600;font-size:14px;color:#1565c0;margin-bottom:6px;">H（日刊紙）コース</div>`;
+    html += hCourses.map(c => renderCourseBlock(c)).join('');
+  }
+  if (nCourses.length) {
+    html += `<div style="font-weight:600;font-size:14px;color:#2e7d32;margin:${hCourses.length?'14px':'0'} 0 6px;">N（日曜版）コース</div>`;
+    html += nCourses.map(c => renderCourseBlock(c)).join('');
+  }
+  el.innerHTML = html;
+}
+
+function renderCourseBlock(c) {
+  const currentPrice = (() => {
+    const now = new Date(); const y = now.getFullYear(), m = now.getMonth()+1;
+    const valid = (c.prices||[]).filter(p =>
+      (p.start_year<y||(p.start_year===y&&p.start_month<=m)) &&
+      (!p.end_year||p.end_year>y||(p.end_year===y&&p.end_month>=m)));
+    return valid.length ? valid[valid.length-1].amount : null;
+  })();
+  const priceTag = currentPrice !== null
+    ? `<span style="font-size:12px;color:#fff;opacity:.9;font-weight:bold;">${Number(currentPrice).toLocaleString()}円/名</span>`
+    : `<span style="font-size:12px;color:#ffcc80;">単価未設定</span>`;
+  const shortBadge = c.short_name
+    ? `<span style="background:rgba(255,255,255,.25);color:#fff;border-radius:4px;padding:1px 7px;font-size:12px;">${esc(c.short_name)}</span>`
+    : '';
+  const readerList = c.readers.length
+    ? c.readers.map(r => `<span class="tag" style="background:#e8f0f8;color:#1a3a5c;">${esc(r.name)}</span>`).join(' ')
+    : '<span class="text-muted" style="font-size:13px;">読者未設定</span>';
+  const bg = c.newspaper_type === 'H' ? '#1565c0' : '#2e7d32';
+  return `<div style="border:1px solid #ddd;border-radius:6px;margin-bottom:8px;overflow:hidden;">
+    <div style="background:${bg};color:#fff;padding:8px 14px;display:flex;align-items:center;gap:8px;">
+      <span style="font-weight:bold;">${esc(c.name)}</span>${shortBadge}
+      <span style="font-size:12px;opacity:.85;">担当：${esc(c.staff_name)}</span>
+      <span style="font-size:12px;opacity:.85;">（${c.readers.length}名）</span>
+      ${priceTag}
+      <button class="btn btn-secondary btn-xs" style="margin-left:auto;" onclick="openCourseModal(${c.id})">編集</button>
+    </div>
+    <div style="padding:6px 14px;background:#fafafa;">${readerList}</div>
+  </div>`;
+}
+
+async function openCourseModal(id) {
+  const c = id ? courses.find(x => x.id === id) : null;
+  document.getElementById('modal-course-title').textContent = c ? 'コース編集' : 'コース登録';
+  document.getElementById('c-id').value = c ? c.id : '';
+  document.getElementById('c-name').value = c ? c.name : '';
+  document.getElementById('c-short').value = c ? (c.short_name || '') : '';
+  document.getElementById('c-type').value = c ? c.newspaper_type : 'H';
+  document.getElementById('c-note').value = c ? (c.note || '') : '';
+  const staffSel = document.getElementById('c-staff');
+  const deliverers = staffList.filter(s => s.is_deliverer);
+  staffSel.innerHTML = deliverers.length
+    ? deliverers.map(s => `<option value="${s.id}" ${c&&s.id===c.staff_id?'selected':''}>${esc(s.name)}</option>`).join('')
+    : '<option value="">（配達担当者未登録）</option>';
+  const extraSec = document.getElementById('c-extra-section');
+  const deleteBtn = document.getElementById('c-delete-btn');
+  if (c) {
+    extraSec.style.display = '';
+    deleteBtn.style.display = '';
+    renderCoursePricesInModal(c);
+    renderCourseReadersInModal(c);
+  } else {
+    extraSec.style.display = 'none';
+    deleteBtn.style.display = 'none';
+  }
+  openModal('modal-course');
+}
+
+function renderCoursePricesInModal(c) {
+  const tbody = document.getElementById('c-price-tbody');
+  tbody.innerHTML = c.prices.length
+    ? c.prices.map(p => `<tr>
+        <td>${p.start_year}年${p.start_month}月〜</td>
+        <td>${p.end_year?p.end_year+'年'+p.end_month+'月':'<span class="text-muted">現在</span>'}</td>
+        <td class="number-cell"><b>${Number(p.amount).toLocaleString()}円</b></td>
+        <td class="text-muted">${esc(p.note)}</td>
+        <td><button class="btn btn-danger btn-xs" onclick="deleteCoursePrice(${p.id})">削除</button></td>
+      </tr>`).join('')
+    : '<tr><td colspan="5" class="empty" style="padding:8px;">登録なし</td></tr>';
+}
+
+function renderCourseReadersInModal(c) {
+  const cid = c.id, ntype = c.newspaper_type;
+  const currentIds = new Set(c.readers.map(r => r.id));
+  document.getElementById('c-reader-list').innerHTML = c.readers.length === 0
+    ? '<div class="text-muted" style="font-size:13px;padding:4px 0;">読者未設定</div>'
+    : c.readers.map(r => `
+        <div style="display:flex;align-items:center;gap:8px;padding:3px 0;border-bottom:1px solid #f0f0f0;">
+          <span style="flex:1;">${esc(r.name)}</span>
+          <span class="text-muted" style="font-size:12px;">${esc(r.address)}</span>
+          <button class="btn btn-danger btn-xs" onclick="removeReaderFromCourseModal(${cid},${r.id})">外す</button>
+        </div>`).join('');
+  const addable = readers.filter(r => hasActivePrintSub(r, ntype) && !currentIds.has(r.id));
+  const addSel = document.getElementById('c-add-reader');
+  addSel.innerHTML = addable.length
+    ? addable.map(r => `<option value="${r.id}">${esc(r.name)}（${esc(r.address)}）</option>`).join('')
+    : '<option value="">追加できる読者がいません</option>';
+  document.getElementById('c-reader-add-row').style.display = addable.length ? '' : 'none';
+}
+
+async function saveCourse() {
+  const id = document.getElementById('c-id').value;
+  const staffId = parseInt(document.getElementById('c-staff').value);
+  if (!staffId) { alert('配達担当者を選択してください'); return; }
+  const body = {
+    name: document.getElementById('c-name').value.trim(),
+    short_name: document.getElementById('c-short').value.trim(),
+    newspaper_type: document.getElementById('c-type').value,
+    staff_id: staffId,
+    note: document.getElementById('c-note').value.trim(),
+  };
+  if (!body.name) { alert('コース名は必須です'); return; }
+  if (id) await api('PUT', `/courses/${id}`, body);
+  else await api('POST', '/courses', body);
+  closeModal('modal-course');
+  await Promise.all([loadCourses(), loadReaders(), renderStaff()]);
+}
+
+async function deleteCourseFromModal() {
+  const id = document.getElementById('c-id').value;
+  if (!confirm('このコースを削除しますか？所属読者の登録も全て削除されます。')) return;
+  await api('DELETE', `/courses/${id}`);
+  closeModal('modal-course');
+  await Promise.all([loadCourses(), loadReaders(), renderStaff()]);
+}
+
+async function addCoursePriceFromModal() {
+  const cid = document.getElementById('c-id').value;
+  const sy = parseInt(document.getElementById('c-py').value);
+  const sm = parseInt(document.getElementById('c-pm').value);
+  const ey = document.getElementById('c-ey').value ? parseInt(document.getElementById('c-ey').value) : null;
+  const em = document.getElementById('c-em').value ? parseInt(document.getElementById('c-em').value) : null;
+  const amt = parseInt(document.getElementById('c-amt').value) || 0;
+  const note = document.getElementById('c-pnote').value.trim();
+  if (!sy || !sm) { alert('開始年月は必須です'); return; }
+  await api('POST', `/courses/${cid}/prices`, { start_year:sy, start_month:sm, end_year:ey, end_month:em, amount:amt, note });
+  ['c-py','c-pm','c-ey','c-em','c-amt','c-pnote'].forEach(id => document.getElementById(id).value = '');
+  await loadCourses();
+  const c = courses.find(x => x.id === parseInt(cid));
+  if (c) renderCoursePricesInModal(c);
+}
+
+async function deleteCoursePrice(pid) {
+  if (!confirm('この単価を削除しますか？')) return;
+  await api('DELETE', `/course-prices/${pid}`);
+  const cid = parseInt(document.getElementById('c-id').value);
+  await loadCourses();
+  const c = courses.find(x => x.id === cid);
+  if (c) renderCoursePricesInModal(c);
+}
+
+async function addReaderFromCourseModal() {
+  const cid = parseInt(document.getElementById('c-id').value);
+  const rid = parseInt(document.getElementById('c-add-reader').value);
+  if (!rid) return;
+  await api('POST', `/courses/${cid}/readers`, { reader_id: rid });
+  await Promise.all([loadCourses(), loadReaders()]);
+  const c = courses.find(x => x.id === cid);
+  if (c) renderCourseReadersInModal(c);
+}
+
+async function removeReaderFromCourseModal(cid, rid) {
+  if (!confirm('このコースから外しますか？')) return;
+  await api('DELETE', `/courses/${cid}/readers/${rid}`);
+  await Promise.all([loadCourses(), loadReaders()]);
+  const c = courses.find(x => x.id === cid);
+  if (c) renderCourseReadersInModal(c);
+}
+
+function updateCourseFilter() {
+  const sel = document.getElementById('reader-course-filter');
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">コースで絞り込み（全て）</option>'
+    + '<option value="__h_no_course__">H購読・コース未所属</option>'
+    + '<option value="__n_no_course__">N購読・コース未所属</option>';
+  courses.forEach(c => {
+    const opt = document.createElement('option');
+    opt.value = String(c.id);
+    opt.textContent = `[${c.newspaper_type}] ${c.name}`;
+    sel.appendChild(opt);
+  });
+  if (cur) sel.value = cur;
+}
+
+// ── Readers ───────────────────────────────────────────────────────────────
+async function loadReaders() {
+  readers = await api('GET', '/readers');
+  renderReaders();
+}
+
+function renderReaders() {
+  const q = document.getElementById('reader-search').value.trim().toLowerCase();
+  const cf = document.getElementById('reader-course-filter').value;
+  let f = readers.filter(r => r.name.toLowerCase().includes(q) || (r.address||'').toLowerCase().includes(q));
+  if (cf === '__h_no_course__') {
+    f = f.filter(r => hasActivePrintSub(r,'H') && !r.courses.some(c => c.newspaper_type === 'H'));
+  } else if (cf === '__n_no_course__') {
+    f = f.filter(r => hasActivePrintSub(r,'N') && !r.courses.some(c => c.newspaper_type === 'N'));
+  } else if (cf) {
+    f = f.filter(r => r.courses.some(c => String(c.course_id) === cf));
+  }
+  document.getElementById('reader-count').textContent = `${f.length}件`;
+  const PAY = { cash:'現金', transfer:'振込', direct_debit:'口座振替' };
+  document.getElementById('reader-tbody').innerHTML = f.map(r => `
+    <tr>
+      <td><b>${esc(r.name)}</b></td>
+      <td>${esc(r.address)}</td>
+      <td>${renderSubTags(r.subscriptions)}</td>
+      <td>${renderDeliveryStaff(r)}</td>
+      <td>${renderCollectionStaff(r)}</td>
+      <td class="text-muted">${esc(r.note)}</td>
+      <td>
+        <button class="btn btn-secondary btn-xs" onclick="openReaderModal(${r.id})">編集</button>
+        <button class="btn btn-danger btn-xs" onclick="deleteReader(${r.id})">削除</button>
+      </td>
+    </tr>`).join('');
+}
+
+function renderDeliveryStaff(r) {
+  const printSubs = (r.subscriptions||[]).filter(s => s.is_print === 1 && s.status !== 'inactive');
+  if (!printSubs.length) return '<span class="text-muted" style="font-size:11px;">—</span>';
+  const names = new Map(); // key=staff_name, unset=null
+  for (const s of printSubs) {
+    const course = (r.courses||[]).find(c => c.newspaper_type === s.newspaper_type);
+    if (course) { names.set(course.staff_name, true); continue; }
+    const da = (r.delivery_staff||[]).find(d => d.newspaper_id === s.newspaper_id);
+    if (da) { names.set(da.staff_name, true); continue; }
+    names.set('__unset__', true);
+  }
+  if (names.size === 1 && names.has('__unset__'))
+    return '<span class="text-muted" style="font-size:12px;">未設定</span>';
+  const parts = [...names.keys()].filter(k => k !== '__unset__')
+    .map(n => `<span style="font-size:13px;">${esc(n)}</span>`);
+  if (names.has('__unset__')) parts.push('<span class="text-muted" style="font-size:11px;">（一部未設定）</span>');
+  return parts.join('・');
+}
+
+function renderCollectionStaff(r) {
+  const needsCollection = (r.subscriptions||[]).some(s =>
+    s.status === 'active' && s.payment_method === 'cash'
+  );
+  if (!needsCollection) return '<span class="text-muted" style="font-size:11px;">—</span>';
+  const cs = r.collection_staff;
+  if (!cs) return '<span style="color:#e53935;font-size:12px;font-weight:600;">未登録</span>';
+  return `<span style="font-size:13px;">${esc(cs.name)}</span>`;
+}
+
+function renderSubTags(subs) {
+  if (!subs||!subs.length) return '<span class="text-muted">なし</span>';
+  return subs.map(s => {
+    const cls = s.status === 'inactive' ? 'tag-inactive' : 'tag-active';
+    const qtyStr = (s.quantity && s.quantity > 1) ? `×${s.quantity}` : '';
+    const periodStr = fmtPeriod(s.start_year, s.start_month, s.end_year, s.end_month);
+    const title = `${s.newspaper_name}（${s.is_print?'紙版':'電子版'}）${qtyStr?' '+s.quantity+'部':''}${periodStr?' '+periodStr:''}`;
+    const periodBadge = periodStr
+      ? `<span style="font-size:10px;color:inherit;opacity:.75;margin-left:2px;">${periodStr}</span>`
+      : '';
+    return `<span class="tag ${cls}" style="white-space:nowrap;" title="${esc(title)}">${esc(s.short_name)}${qtyStr}${periodBadge}</span>`;
+  }).join(' ');
+}
+
+function fmtPeriod(sy, sm, ey, em) {
+  if (!sy && !ey) return '';
+  const start = sy ? `${sy}年${sm||'?'}月` : '';
+  const end   = ey ? `${ey}年${em||'?'}月` : '継続中';
+  return start ? `${start}〜${end}` : `〜${end}`;
+}
+
+function hasActiveSub(r, ntype) {
+  return (r.subscriptions||[]).some(s =>
+    s.newspaper_type === ntype && s.status !== 'inactive'
+  );
+}
+
+// 紙版のみ（コース所属・配達担当の対象）
+function hasActivePrintSub(r, ntype) {
+  return (r.subscriptions||[]).some(s =>
+    s.newspaper_type === ntype && s.is_print === 1 && s.status !== 'inactive'
+  );
+}
+
+function renderCoursesTags(r) {
+  const cs = r.courses || [];
+  const hasH = hasActivePrintSub(r, 'H');
+  const hasN = hasActivePrintSub(r, 'N');
+  if (!hasH && !hasN) return '<span class="text-muted" style="font-size:11px;">—</span>';
+  const tags = [];
+  if (hasH) {
+    const hc = cs.filter(c => c.newspaper_type === 'H');
+    if (!hc.length) tags.push('<span style="background:#fff3e0;color:#e65100;border:1px solid #ffcc80;border-radius:10px;padding:2px 8px;font-size:11px;">H未所属</span>');
+    else hc.forEach(c => tags.push(`<span class="tag" style="background:#ddeeff;color:#1a3a5c;">${esc(c.short_name || c.course_name)}</span>`));
+  }
+  if (hasN) {
+    const nc = cs.filter(c => c.newspaper_type === 'N');
+    if (!nc.length) tags.push('<span style="background:#e8f5e9;color:#2e7d32;border:1px solid #a5d6a7;border-radius:10px;padding:2px 8px;font-size:11px;">N未所属</span>');
+    else nc.forEach(c => tags.push(`<span class="tag" style="background:#ddf0dd;color:#2e7d32;">${esc(c.short_name || c.course_name)}</span>`));
+  }
+  return tags.join(' ');
+}
+
+async function openReaderModal(id) {
+  const r = id ? readers.find(x=>x.id===id) : null;
+  document.getElementById('modal-reader-title').textContent = r?'読者編集':'読者登録';
+  document.getElementById('reader-id').value = r?r.id:'';
+  document.getElementById('r-name').value = r?r.name:'';
+  document.getElementById('r-address').value = r?r.address:'';
+  document.getElementById('r-note').value = r?r.note:'';
+  document.getElementById('sub-editor').innerHTML = '';
+  renderSubAddButtons();
+  (r?r.subscriptions:[]).forEach(s => addSubRow(s.newspaper_id, s.status, s.quantity, s.start_year, s.start_month, s.end_year, s.end_month, s.payment_method));
+  const sec   = document.getElementById('r-course-section');
+  const dsec  = document.getElementById('r-delivery-section');
+  const csec  = document.getElementById('r-collection-section');
+  const hsec  = document.getElementById('r-sub-history-section');
+  if (!r) {
+    sec.style.display = 'none';
+    dsec.style.display = 'none';
+    csec.style.display = 'none';
+    hsec.style.display = 'none';
+  } else {
+    sec.style.display = '';
+    renderReaderCourseSection(r);
+    const printSubs = (r.subscriptions||[]).filter(s => s.is_print === 1 && s.status !== 'inactive');
+    const uncourted = printSubs.filter(s =>
+      !(r.courses||[]).some(c => c.newspaper_type === s.newspaper_type)
+    );
+    if (uncourted.length) {
+      dsec.style.display = '';
+      populateMonthPicker('r-del-s');
+      renderReaderDeliverySection(r, uncourted);
+    } else {
+      dsec.style.display = 'none';
+    }
+    const needsColl = (r.subscriptions||[]).some(s => s.status === 'active' && s.payment_method === 'cash');
+    if (needsColl) {
+      csec.style.display = '';
+      populateMonthPicker('r-col-s');
+      renderReaderCollectionSection(r);
+    } else {
+      csec.style.display = 'none';
+    }
+    // 購読履歴セクション
+    hsec.style.display = '';
+    _initSubHistoryForm();
+    const allSubs = await api('GET', `/readers/${r.id}/subscription-history`);
+    renderSubHistory(r.id, allSubs);
+  }
+  openModal('modal-reader');
+}
+
+function _initSubHistoryForm() {
+  const npSel = document.getElementById('rsh-np');
+  npSel.innerHTML = newspapers.map(n => `<option value="${n.id}">${esc(n.name)}</option>`).join('');
+  const now = new Date();
+  const smSel = document.getElementById('rsh-sm');
+  const emSel = document.getElementById('rsh-em');
+  smSel.innerHTML = Array.from({length:12},(_,i)=>i+1).map(m=>`<option value="${m}"${m===now.getMonth()+1?' selected':''}>${m}</option>`).join('');
+  emSel.innerHTML = '<option value="">—</option>' + Array.from({length:12},(_,i)=>i+1).map(m=>`<option value="${m}">${m}</option>`).join('');
+  document.getElementById('rsh-sy').value = now.getFullYear();
+  document.getElementById('rsh-ey').value = '';
+  document.getElementById('rsh-qty').value = 1;
+  document.getElementById('rsh-status').value = 'active';
+  document.getElementById('rsh-pay').value = 'cash';
+}
+
+function renderSubHistory(rid, allSubs) {
+  const tbody = document.getElementById('r-sub-history-tbody');
+  if (!allSubs.length) {
+    tbody.innerHTML = '<tr><td colspan="6" style="padding:6px;text-align:center;color:#aaa;font-size:12px;">履歴なし</td></tr>';
+    return;
+  }
+  tbody.innerHTML = allSubs.map(s => {
+    const startStr = s.start_year ? `${s.start_year}年${s.start_month}月` : '—';
+    const endStr   = s.end_year   ? `${s.end_year}年${s.end_month}月`   : '現在';
+    const statusLabel = s.status === 'inactive' ? '<span style="color:#e53935;">休止中</span>' : '購読中';
+    return `<tr>
+      <td style="padding:4px 6px;border:1px solid #eee;">${esc(s.newspaper_name)}</td>
+      <td style="padding:4px 6px;border:1px solid #eee;text-align:center;">${startStr}</td>
+      <td style="padding:4px 6px;border:1px solid #eee;text-align:center;">${endStr}</td>
+      <td style="padding:4px 6px;border:1px solid #eee;text-align:center;">${s.quantity}部</td>
+      <td style="padding:4px 6px;border:1px solid #eee;text-align:center;">${statusLabel}</td>
+      <td style="padding:4px 6px;border:1px solid #eee;text-align:center;">
+        <button class="btn btn-danger btn-xs" onclick="deleteSubHistory(${rid},${s.id})">削除</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+async function addSubHistory() {
+  const rid = document.getElementById('reader-id').value;
+  if (!rid) return;
+  const npId = parseInt(document.getElementById('rsh-np').value);
+  const sy = parseInt(document.getElementById('rsh-sy').value) || null;
+  const sm = parseInt(document.getElementById('rsh-sm').value) || null;
+  const eyVal = document.getElementById('rsh-ey').value;
+  const emVal = document.getElementById('rsh-em').value;
+  const ey = eyVal ? parseInt(eyVal) : null;
+  const em = emVal ? parseInt(emVal) : null;
+  if (!sy || !sm) { alert('開始年月は必須です'); return; }
+  await api('POST', `/readers/${rid}/subscription-history`, {
+    newspaper_id: npId,
+    start_year: sy, start_month: sm,
+    end_year: ey, end_month: em,
+    quantity: parseInt(document.getElementById('rsh-qty').value) || 1,
+    status: document.getElementById('rsh-status').value,
+    payment_method: document.getElementById('rsh-pay').value,
+  });
+  const allSubs = await api('GET', `/readers/${rid}/subscription-history`);
+  renderSubHistory(parseInt(rid), allSubs);
+  await loadReaders();
+}
+
+async function deleteSubHistory(rid, sid) {
+  if (!confirm('この購読履歴を削除しますか？')) return;
+  await api('DELETE', `/subscriptions/${sid}`);
+  const allSubs = await api('GET', `/readers/${rid}/subscription-history`);
+  renderSubHistory(rid, allSubs);
+  await loadReaders();
+}
+
+function addSubRow(newspaper_id, status, qty, sy, sm, ey, em, payment_method) {
+  const nid = parseInt(newspaper_id);
+  const np = newspapers.find(n => n.id === nid);
+  if (!np) { alert('新聞が見つかりません'); return; }
+  if (document.getElementById('sub-editor').querySelector(`[data-np-id="${nid}"]`)) {
+    alert(`${np.name}は既に追加されています`); return;
+  }
+  qty = parseInt(qty) || 1;
+  sy = sy || ''; sm = sm || ''; ey = ey || ''; em = em || '';
+  payment_method = payment_method || 'cash';
+  const payOpts = `<option value="cash" ${payment_method==='cash'?'selected':''}>現金</option><option value="transfer" ${payment_method==='transfer'?'selected':''}>振込等</option>`;
+  const statusOpts = `<option value="active" ${status!=='inactive'?'selected':''}>購読中</option>
+    <option value="inactive" ${status==='inactive'?'selected':''}>休止中</option>`;
+
+  const div = document.createElement('div');
+  div.dataset.npId = nid;
+  div.style.cssText = 'display:flex;align-items:center;gap:8px;margin-bottom:6px;padding:6px 8px;background:#f5f5f5;border-radius:4px;';
+  const subPriceStr = (np.subscription_price !== null && np.subscription_price !== undefined)
+    ? `<span style="font-size:11px;color:#888;">@${Number(np.subscription_price).toLocaleString()}円</span>` : '';
+  div.innerHTML = `
+    <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+      <span style="background:#e0e0e0;color:#333;border-radius:4px;padding:2px 8px;font-size:13px;font-weight:bold;">${esc(np.short_name)}</span>
+      <span style="font-size:12px;color:#555;">${esc(np.name)}</span>${subPriceStr}
+      <label style="font-size:12px;color:#555;display:flex;align-items:center;gap:3px;">部数<input type="number" min="1" value="${qty}" class="sub-qty" style="width:50px;font-size:12px;padding:2px 6px;border:1px solid #ccc;border-radius:3px;"></label>
+      <select class="sub-status" style="font-size:12px;padding:2px 6px;border:1px solid #ccc;border-radius:3px;">${statusOpts}</select>
+      <select class="sub-pay" style="font-size:12px;padding:2px 6px;border:1px solid #ccc;border-radius:3px;">${payOpts}</select>
+      <button class="btn btn-danger btn-xs" onclick="this.closest('[data-np-id]').remove()">✕</button>
+    </div>
+    <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:4px;padding-left:4px;">
+      <span style="font-size:11px;color:#888;">購読期間：</span>
+      <input type="number" class="sub-sy" placeholder="開始年" value="${sy||''}" style="width:64px;font-size:12px;padding:2px 6px;border:1px solid #ccc;border-radius:3px;">
+      年
+      <input type="number" class="sub-sm" placeholder="月" min="1" max="12" value="${sm||''}" style="width:44px;font-size:12px;padding:2px 6px;border:1px solid #ccc;border-radius:3px;">
+      月〜
+      <input type="number" class="sub-ey" placeholder="終了年" value="${ey||''}" style="width:64px;font-size:12px;padding:2px 6px;border:1px solid #ccc;border-radius:3px;">
+      年
+      <input type="number" class="sub-em" placeholder="月" min="1" max="12" value="${em||''}" style="width:44px;font-size:12px;padding:2px 6px;border:1px solid #ccc;border-radius:3px;">
+      月<span style="font-size:11px;color:#aaa;">（空欄=自動延長）</span>
+    </div>`;
+  document.getElementById('sub-editor').appendChild(div);
+}
+
+function renderReaderCourseSection(r) {
+  const currentIds = new Set((r.courses||[]).map(c => c.course_id));
+  const listEl = document.getElementById('r-course-list');
+  listEl.innerHTML = (r.courses||[]).length === 0
+    ? '<span class="text-muted" style="font-size:13px;">未所属</span>'
+    : r.courses.map(c => `
+        <div style="display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid #f0f0f0;">
+          <span class="tag" style="background:${c.newspaper_type==='H'?'#1565c0':'#2e7d32'};color:#fff;padding:1px 6px;font-size:11px;">${c.newspaper_type}</span>
+          <span style="flex:1;">${esc(c.course_name)}</span>
+          <span class="text-muted">${esc(c.staff_name)}</span>
+          <button class="btn btn-danger btn-xs" onclick="removeFromCourseFromModal(${c.course_id},${r.id})">外す</button>
+        </div>`).join('');
+  const hasSubs = new Set(['H','N'].filter(t => hasActivePrintSub(r, t)));
+  const available = courses.filter(c => hasSubs.has(c.newspaper_type) && !currentIds.has(c.id));
+  const sel = document.getElementById('r-course-sel');
+  sel.innerHTML = available.length
+    ? available.map(c => `<option value="${c.id}">[${c.newspaper_type}] ${esc(c.name)}（${esc(c.staff_name)}）</option>`).join('')
+    : '<option value="">追加できるコースがありません</option>';
+  document.getElementById('r-course-add-row').style.display = available.length ? '' : 'none';
+}
+
+function renderReaderDeliverySection(r, uncourted) {
+  const deliverers = staffList.filter(s => s.is_deliverer);
+  const listEl = document.getElementById('r-delivery-list');
+  if (!deliverers.length) {
+    listEl.innerHTML = '<span class="text-muted" style="font-size:13px;">配達担当者が登録されていません</span>';
+    return;
+  }
+  // 各紙ごとにdropdown
+  listEl.innerHTML = uncourted.map(s => {
+    const cur = (r.delivery_staff||[]).find(d => d.newspaper_id === s.newspaper_id);
+    const opts = `<option value="">— 未設定 —</option>` +
+      deliverers.map(d => `<option value="${d.id}" ${cur && cur.staff_id===d.id?'selected':''}>${esc(d.name)}</option>`).join('');
+    return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+      <span style="background:#e0e0e0;color:#333;border-radius:4px;padding:2px 8px;font-size:12px;font-weight:bold;min-width:36px;text-align:center;">${esc(s.short_name)}</span>
+      <span style="font-size:12px;color:#555;flex:0 0 auto;">${esc(s.newspaper_name)}</span>
+      <select data-del-np-id="${s.newspaper_id}" style="flex:1;font-size:13px;padding:3px 6px;border:1px solid #ccc;border-radius:4px;" onchange="saveReaderDeliveryAssign(${r.id})">${opts}</select>
+    </div>`;
+  }).join('');
+}
+
+async function saveReaderDeliveryAssign(rid) {
+  const sels = [...document.querySelectorAll('[data-del-np-id]')];
+  const assignments = sels.map(s => ({
+    newspaper_id: parseInt(s.dataset.delNpId),
+    staff_id: s.value ? parseInt(s.value) : null,
+  }));
+  const { start_year, start_month } = getMonthPicker('r-del-s');
+  await api('PUT', `/readers/${rid}/delivery-assignments`, { assignments, start_year, start_month });
+  await loadReaders();
+}
+
+function renderReaderCollectionSection(r) {
+  const collectors = staffList.filter(s => s.is_collector);
+  const listEl = document.getElementById('r-collection-list');
+  if (!collectors.length) {
+    listEl.innerHTML = '<span class="text-muted" style="font-size:13px;">集金担当者が登録されていません</span>';
+    return;
+  }
+  const curId = r.collection_staff ? r.collection_staff.id : '';
+  const opts = `<option value="">— 未設定 —</option>` +
+    collectors.map(s => `<option value="${s.id}" ${curId===s.id?'selected':''}>${esc(s.name)}</option>`).join('');
+  listEl.innerHTML = `<select id="r-collector-sel" style="font-size:13px;padding:4px 8px;border:1px solid #ccc;border-radius:4px;" onchange="saveReaderCollection(${r.id})">${opts}</select>`;
+}
+
+async function saveReaderCollection(rid) {
+  const staff_id = parseInt(document.getElementById('r-collector-sel').value) || null;
+  const { start_year, start_month } = getMonthPicker('r-col-s');
+  await api('PUT', `/readers/${rid}/collection-assignment`, { staff_id, start_year, start_month });
+  await loadReaders();
+}
+
+async function addReaderToCourseFromModal() {
+  const rid = parseInt(document.getElementById('reader-id').value);
+  const cid = parseInt(document.getElementById('r-course-sel').value);
+  await api('POST', `/courses/${cid}/readers`, { reader_id: rid });
+  await Promise.all([loadReaders(), loadCourses()]);
+  const r = readers.find(x => x.id === rid);
+  if (r) renderReaderCourseSection(r);
+}
+
+async function removeFromCourseFromModal(cid, rid) {
+  if (!confirm('このコースから外しますか？')) return;
+  await api('DELETE', `/courses/${cid}/readers/${rid}`);
+  await Promise.all([loadReaders(), loadCourses()]);
+  const r = readers.find(x => x.id === rid);
+  if (r) renderReaderCourseSection(r);
+}
+
+async function saveReader() {
+  const id = document.getElementById('reader-id').value;
+  const body = {
+    name: document.getElementById('r-name').value.trim(),
+    address: document.getElementById('r-address').value.trim(),
+    note: document.getElementById('r-note').value.trim(),
+  };
+  if (!body.name) { alert('名前は必須です'); return; }
+  if (id) await api('PUT', `/readers/${id}`, body);
+  else {
+    const res = await api('POST', '/readers', body);
+    document.getElementById('reader-id').value = res.id;
+  }
+  const rid = document.getElementById('reader-id').value;
+  const rows = document.getElementById('sub-editor').querySelectorAll('[data-np-id]');
+  await api('PUT', `/readers/${rid}/subscriptions`,
+    Array.from(rows).map(row => ({
+      newspaper_id: parseInt(row.dataset.npId),
+      quantity: parseInt(row.querySelector('.sub-qty').value) || 1,
+      status: row.querySelector('.sub-status').value,
+      payment_method: row.querySelector('.sub-pay').value,
+      start_year: parseInt(row.querySelector('.sub-sy').value) || null,
+      start_month: parseInt(row.querySelector('.sub-sm').value) || null,
+      end_year: parseInt(row.querySelector('.sub-ey').value) || null,
+      end_month: parseInt(row.querySelector('.sub-em').value) || null,
+    }))
+  );
+  closeModal('modal-reader');
+  await loadReaders();
+}
+
+async function deleteReader(id) {
+  if (!confirm('この読者を削除しますか？')) return;
+  await api('DELETE', `/readers/${id}`);
+  await loadReaders();
+}
+
+// ── Staff ─────────────────────────────────────────────────────────────────
+async function loadStaff() { staffList = await api('GET', '/staff'); await renderStaff(); }
+async function renderStaff() {
+  const el = document.getElementById('staff-list');
+  if (!el) return;
+  // 月ピッカー初期化（初回のみ）
+  const vyEl = document.getElementById('staff-view-y');
+  const vmEl = document.getElementById('staff-view-m');
+  if (vyEl && !vyEl.options.length) {
+    const now = new Date();
+    vyEl.innerHTML = Array.from({length:11},(_,i)=>2020+i).map(y=>`<option value="${y}"${y===now.getFullYear()?' selected':''}>${y}</option>`).join('');
+    vmEl.innerHTML = Array.from({length:12},(_,i)=>i+1).map(m=>`<option value="${m}"${m===now.getMonth()+1?' selected':''}>${m}</option>`).join('');
+  }
+  const viewY = parseInt(vyEl?.value) || new Date().getFullYear();
+  const viewM = parseInt(vmEl?.value) || (new Date().getMonth()+1);
+  const now = new Date();
+  const isCurrent = viewY === now.getFullYear() && viewM === now.getMonth()+1;
+  const labelEl = document.getElementById('staff-view-label');
+  if (labelEl) labelEl.textContent = isCurrent ? '（現在）' : `（${viewY}年${viewM}月時点）`;
+  const qs = `?year=${viewY}&month=${viewM}`;
+  if (!staffList.length) { el.innerHTML = '<div class="empty">担当者が登録されていません</div>'; return; }
+  let html = '';
+  for (const s of staffList) {
+    const assigned = s.is_collector ? await api('GET', `/staff/${s.id}/assignments${qs}`) : [];
+    const myCourses = courses.filter(c => c.staff_id === s.id);
+    const roles = [];
+    if (s.is_deliverer) roles.push('配達');
+    if (s.is_collector) roles.push('集金');
+    const bgColor = (s.is_deliverer && s.is_collector)?'#4a235a':s.is_deliverer?'#1a3a5c':'#2e5f2e';
+
+    html += `<div class="staff-card">
+      <div class="staff-card-header" style="background:${bgColor};">
+        <b style="font-size:15px;">${esc(s.name)}</b>
+        <span style="font-size:12px;opacity:.85;">${roles.join('・')}</span>
+        <span style="color:#ccc;font-size:12px;">${esc(s.contact)}</span>
+        <div style="margin-left:auto;display:flex;gap:6px;">
+          <button class="btn btn-secondary btn-xs" onclick="openStaffModal(${s.id})">編集</button>
+          <button class="btn btn-danger btn-xs" onclick="deleteStaff(${s.id})">削除</button>
+          ${s.is_deliverer?`<button class="btn btn-primary btn-xs" onclick="openDeliveryAssignModal(${s.id})">個別配達担当設定</button>`:''}
+          ${s.is_collector?`<button class="btn btn-success btn-xs" onclick="openAssignModal(${s.id})">集金担当設定</button>`:''}
+        </div>
+      </div>
+      <div class="staff-card-body">`;
+
+    if (s.is_deliverer) {
+      html += `<div class="section-label">配達コース（${myCourses.length}件）</div>`;
+      if (!myCourses.length) html += '<div class="text-muted" style="font-size:12px;">コース未割当</div>';
+      else html += myCourses.map(c => {
+        const cp = (() => {
+          const now = new Date(); const y=now.getFullYear(), m=now.getMonth()+1;
+          const v=(c.prices||[]).filter(p=>(p.start_year<y||(p.start_year===y&&p.start_month<=m))&&(!p.end_year||p.end_year>y||(p.end_year===y&&p.end_month>=m)));
+          return v.length ? v[v.length-1].amount : null;
+        })();
+        return `<div style="display:flex;align-items:center;gap:8px;padding:5px 8px;border:1px solid #eee;border-radius:4px;margin-bottom:4px;background:#f9f9f9;">
+          <span style="background:${c.newspaper_type==='H'?'#1565c0':'#2e7d32'};color:#fff;border-radius:4px;padding:1px 6px;font-size:11px;font-weight:bold;">${c.newspaper_type}</span>
+          <span style="font-weight:bold;">${esc(c.name)}</span>
+          ${c.short_name?`<span style="font-size:12px;color:#888;">(${esc(c.short_name)})</span>`:''}
+          <span class="text-muted">${c.readers.length}名</span>
+          <span style="font-size:12px;color:#1a3a5c;">${cp!==null?Number(cp).toLocaleString()+'円':'単価未設定'}</span>
+        </div>`;
+      }).join('');
+    }
+
+    if (s.is_collector) {
+      html += `<div class="section-label" style="margin-top:${s.is_deliverer?'12px':'0'};">集金担当読者（${assigned.length}件）</div>`;
+      html += assigned.length === 0
+        ? '<span class="text-muted" style="font-size:12px;">未設定</span>'
+        : assigned.map(r => `<span class="tag" style="background:#e0e0e0;color:#333;">${esc(r.name)}</span>`).join(' ');
+    }
+
+    html += `</div></div>`;
+  }
+  el.innerHTML = html;
+}
+
+async function openStaffModal(id) {
+  const s = id ? staffList.find(x=>x.id===id) : null;
+  document.getElementById('modal-staff-title').textContent = s?'担当者編集':'担当者登録';
+  document.getElementById('staff-id').value = s?s.id:'';
+  document.getElementById('s-name').value = s?s.name:'';
+  document.getElementById('s-contact').value = s?s.contact:'';
+  document.getElementById('s-note').value = s?s.note:'';
+  document.getElementById('s-deliverer').checked = s?!!s.is_deliverer:false;
+  document.getElementById('s-collector').checked = s?!!s.is_collector:false;
+  const delivSec = document.getElementById('s-delivery-section');
+  const collSec  = document.getElementById('s-collection-section');
+  if (s) {
+    if (s.is_deliverer) {
+      delivSec.style.display = '';
+      populateMonthPicker('s-del-s');
+      const assigned = await api('GET', `/staff/${s.id}/delivery-assignments`);
+      const assignedKeys = new Set((assigned||[]).map(a=>`${a.reader_id}:${a.newspaper_id}`));
+      const pairs = _getDeliveryCandidatePairs();
+      document.getElementById('s-delivery-list').innerHTML = pairs.length
+        ? pairs.map(({r,s:sub}) => {
+            const key = `${r.id}:${sub.newspaper_id}`;
+            return `<label style="display:inline-flex;align-items:center;gap:4px;margin-right:10px;margin-bottom:4px;font-size:13px;cursor:pointer;">
+              <input type="checkbox" data-sdel-key="${key}" data-sdel-rid="${r.id}" data-sdel-nid="${sub.newspaper_id}" ${assignedKeys.has(key)?'checked':''}>
+              ${esc(r.name)}（${esc(sub.short_name)}）
+            </label>`;
+          }).join('')
+        : '<span class="text-muted" style="font-size:13px;">対象読者なし</span>';
+    } else { delivSec.style.display = 'none'; }
+    if (s.is_collector) {
+      collSec.style.display = '';
+      populateMonthPicker('s-col-s');
+      const assigned = await api('GET', `/staff/${s.id}/assignments`);
+      const assignedIds = new Set((assigned||[]).map(r=>r.id));
+      const cashReaders = readers.filter(r =>
+        (r.subscriptions||[]).some(sub => sub.status==='active' && sub.payment_method==='cash')
+      );
+      document.getElementById('s-collection-list').innerHTML = cashReaders.length
+        ? cashReaders.map(r => `<label style="display:inline-flex;align-items:center;gap:4px;margin-right:10px;font-size:13px;cursor:pointer;">
+            <input type="checkbox" data-scol-rid="${r.id}" ${assignedIds.has(r.id)?'checked':''}>
+            ${esc(r.name)}
+          </label>`).join('')
+        : '<span class="text-muted" style="font-size:13px;">対象読者なし</span>';
+    } else { collSec.style.display = 'none'; }
+    const histSec = document.getElementById('s-history-section');
+    histSec.style.display = '';
+    const history = await api('GET', `/staff/${s.id}/assignment-history`);
+    renderStaffHistory(history);
+  } else {
+    delivSec.style.display = 'none';
+    collSec.style.display = 'none';
+    document.getElementById('s-history-section').style.display = 'none';
+  }
+  openModal('modal-staff');
+}
+
+function renderStaffHistory(history) {
+  const el = document.getElementById('s-history-content');
+  let html = '';
+  const mStr = (y, m) => y ? `${y}年${m}月` : '—';
+  const endStr = (y, m) => y ? `${y}年${m}月` : '現在';
+
+  if (history.collections && history.collections.length) {
+    html += `<div style="font-size:12px;font-weight:600;color:#555;margin-bottom:4px;">集金担当</div>
+    <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:10px;">
+      <thead><tr style="background:#f0f0f0;">
+        <th style="padding:3px 6px;border:1px solid #ddd;text-align:left;">読者</th>
+        <th style="padding:3px 6px;border:1px solid #ddd;text-align:center;">開始</th>
+        <th style="padding:3px 6px;border:1px solid #ddd;text-align:center;">終了</th>
+      </tr></thead><tbody>`;
+    html += history.collections.map(r => `<tr>
+      <td style="padding:3px 6px;border:1px solid #eee;">${esc(r.reader_name)}</td>
+      <td style="padding:3px 6px;border:1px solid #eee;text-align:center;">${mStr(r.start_year, r.start_month)}</td>
+      <td style="padding:3px 6px;border:1px solid #eee;text-align:center;">${endStr(r.end_year, r.end_month)}</td>
+    </tr>`).join('');
+    html += '</tbody></table>';
+  }
+
+  if (history.deliveries && history.deliveries.length) {
+    html += `<div style="font-size:12px;font-weight:600;color:#555;margin-bottom:4px;">配達担当</div>
+    <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:10px;">
+      <thead><tr style="background:#f0f0f0;">
+        <th style="padding:3px 6px;border:1px solid #ddd;text-align:left;">読者</th>
+        <th style="padding:3px 6px;border:1px solid #ddd;text-align:left;">新聞</th>
+        <th style="padding:3px 6px;border:1px solid #ddd;text-align:center;">開始</th>
+        <th style="padding:3px 6px;border:1px solid #ddd;text-align:center;">終了</th>
+      </tr></thead><tbody>`;
+    html += history.deliveries.map(r => `<tr>
+      <td style="padding:3px 6px;border:1px solid #eee;">${esc(r.reader_name)}</td>
+      <td style="padding:3px 6px;border:1px solid #eee;">${esc(r.short_name||r.newspaper_name)}</td>
+      <td style="padding:3px 6px;border:1px solid #eee;text-align:center;">${mStr(r.start_year, r.start_month)}</td>
+      <td style="padding:3px 6px;border:1px solid #eee;text-align:center;">${endStr(r.end_year, r.end_month)}</td>
+    </tr>`).join('');
+    html += '</tbody></table>';
+  }
+
+  el.innerHTML = html || '<div style="font-size:12px;color:#aaa;">担当履歴なし</div>';
+}
+
+function _getDeliveryCandidatePairs() {
+  // 紙版購読があり、その新聞typeのコース未所属の(reader, subscription)ペア
+  const pairs = [];
+  for (const r of readers) {
+    for (const sub of (r.subscriptions||[])) {
+      if (!sub.is_print || sub.status === 'inactive') continue;
+      if ((r.courses||[]).some(c => c.newspaper_type === sub.newspaper_type)) continue;
+      pairs.push({r, s: sub});
+    }
+  }
+  return pairs;
+}
+
+async function saveStaff() {
+  const id = document.getElementById('staff-id').value;
+  const body = {
+    name: document.getElementById('s-name').value.trim(),
+    contact: document.getElementById('s-contact').value.trim(),
+    note: document.getElementById('s-note').value.trim(),
+    is_deliverer: document.getElementById('s-deliverer').checked ? 1 : 0,
+    is_collector: document.getElementById('s-collector').checked ? 1 : 0,
+  };
+  if (!body.name) { alert('名前は必須です'); return; }
+  let sid = id;
+  if (id) await api('PUT', `/staff/${id}`, body);
+  else { const r = await api('POST', '/staff', body); sid = r.id; }
+  if (sid) {
+    if (body.is_deliverer) {
+      const { start_year, start_month } = getMonthPicker('s-del-s');
+      const assignments = [...document.querySelectorAll('[data-sdel-key]:checked')].map(c=>({
+        reader_id: parseInt(c.dataset.sdelRid),
+        newspaper_id: parseInt(c.dataset.sdelNid),
+      }));
+      await api('PUT', `/staff/${sid}/delivery-assignments`, { assignments, start_year, start_month });
+    }
+    if (body.is_collector) {
+      const { start_year, start_month } = getMonthPicker('s-col-s');
+      const colRids = [...document.querySelectorAll('[data-scol-rid]:checked')].map(c=>parseInt(c.dataset.scolRid));
+      await api('PUT', `/staff/${sid}/assignments`, { reader_ids: colRids, start_year, start_month });
+    }
+  }
+  closeModal('modal-staff');
+  await Promise.all([loadStaff(), loadReaders()]);
+}
+async function deleteStaff(id) {
+  if (!confirm('この担当者を削除しますか？')) return;
+  await api('DELETE', `/staff/${id}`);
+  await Promise.all([loadStaff(), loadCourses()]);
+}
+
+// ── Collection assignments ────────────────────────────────────────────────
+let _assignSelected = new Set();
+async function openAssignModal(sid) {
+  document.getElementById('assign-staff-id').value = sid;
+  const s = staffList.find(x=>x.id===sid);
+  document.getElementById('modal-assignments-title').textContent = `集金担当の設定：${s.name}`;
+  populateMonthPicker('ca-s');
+  document.getElementById('ca-search').value = '';
+  const current = await api('GET', `/staff/${sid}/assignments`);
+  _assignSelected = new Set(current.map(r=>r.id));
+  renderAssignLists();
+  openModal('modal-assignments');
+}
+function renderAssignLists() {
+  const q = (document.getElementById('ca-search')?.value || '').trim().toLowerCase();
+  let cashReaders = readers.filter(r =>
+    (r.subscriptions||[]).some(s => s.status === 'active' && s.payment_method === 'cash')
+  );
+  if (q) cashReaders = cashReaders.filter(r =>
+    r.name.toLowerCase().includes(q) || (r.address||'').toLowerCase().includes(q)
+  );
+  const mkItem = (r, isSel) => `
+    <div style="padding:5px 8px;display:flex;align-items:center;gap:6px;border-bottom:1px solid #f0f0f0;">
+      <span style="flex:1;font-size:13px;">${esc(r.name)}</span>
+      <span class="text-muted" style="font-size:11px;">${esc(r.address)}</span>
+      <button class="btn ${isSel?'btn-danger':'btn-success'} btn-xs" onclick="toggleAssign(${r.id})">${isSel?'外す':'追加'}</button>
+    </div>`;
+  document.getElementById('assign-unselected').innerHTML = cashReaders.filter(r=>!_assignSelected.has(r.id)).map(r=>mkItem(r,false)).join('') || '<div class="empty" style="padding:10px;">なし</div>';
+  document.getElementById('assign-selected').innerHTML = cashReaders.filter(r=>_assignSelected.has(r.id)).map(r=>mkItem(r,true)).join('') || '<div class="empty" style="padding:10px;">なし</div>';
+  const countEl = document.getElementById('ca-selected-count');
+  if (countEl) countEl.textContent = `（${_assignSelected.size}名）`;
+}
+function toggleAssign(rid) { _assignSelected.has(rid)?_assignSelected.delete(rid):_assignSelected.add(rid); renderAssignLists(); }
+async function saveAssignments() {
+  const sid = document.getElementById('assign-staff-id').value;
+  const { start_year, start_month } = getMonthPicker('ca-s');
+  await api('PUT', `/staff/${sid}/assignments`, { reader_ids: Array.from(_assignSelected), start_year, start_month });
+  closeModal('modal-assignments');
+  await Promise.all([loadReaders(), renderStaff()]);
+}
+
+// ── Delivery assignments ──────────────────────────────────────────────────
+let _deliveryAssignSelected = new Set(); // "reader_id:newspaper_id" keys
+
+let _daFilter = 'all';
+
+function setDaFilter(f) {
+  _daFilter = f;
+  ['all','H','N'].forEach(x => {
+    const btn = document.getElementById(`da-f-${x}`);
+    if (btn) btn.style.fontWeight = x === f ? 'bold' : 'normal';
+  });
+  renderDeliveryAssignLists();
+}
+
+async function openDeliveryAssignModal(sid) {
+  document.getElementById('delivery-assign-staff-id').value = sid;
+  const s = staffList.find(x => x.id === sid);
+  document.getElementById('modal-delivery-title').textContent = `個別配達担当の設定：${s.name}`;
+  populateMonthPicker('da-s');
+  document.getElementById('da-search').value = '';
+  _daFilter = 'all';
+  ['all','H','N'].forEach(x => {
+    const btn = document.getElementById(`da-f-${x}`);
+    if (btn) btn.style.fontWeight = x === 'all' ? 'bold' : 'normal';
+  });
+  const current = await api('GET', `/staff/${sid}/delivery-assignments`);
+  _deliveryAssignSelected = new Set((current||[]).map(a => `${a.reader_id}:${a.newspaper_id}`));
+  renderDeliveryAssignLists();
+  openModal('modal-delivery-assignments');
+}
+
+function renderDeliveryAssignLists() {
+  const q = (document.getElementById('da-search')?.value || '').trim().toLowerCase();
+  let pairs = _getDeliveryCandidatePairs();
+  if (_daFilter !== 'all') pairs = pairs.filter(p => p.s.newspaper_type === _daFilter);
+  if (q) pairs = pairs.filter(p =>
+    p.r.name.toLowerCase().includes(q) || (p.r.address||'').toLowerCase().includes(q)
+  );
+  const mkItem = ({r, s}, isSel) => {
+    const key = `${r.id}:${s.newspaper_id}`;
+    const npColor = s.newspaper_type === 'H' ? '#1565c0' : '#2e7d32';
+    return `<div style="padding:5px 8px;display:flex;align-items:center;gap:6px;border-bottom:1px solid #f0f0f0;">
+      <span style="background:${npColor};color:#fff;border-radius:3px;padding:1px 5px;font-size:11px;font-weight:bold;">${esc(s.newspaper_type)}</span>
+      <span style="flex:1;font-size:13px;">${esc(r.name)}</span>
+      <span class="text-muted" style="font-size:11px;">${esc(r.address)}</span>
+      <button class="btn ${isSel?'btn-danger':'btn-success'} btn-xs" onclick="toggleDeliveryAssign('${key}')">${isSel?'外す':'追加'}</button>
+    </div>`;
+  };
+  const unsel = pairs.filter(p => !_deliveryAssignSelected.has(`${p.r.id}:${p.s.newspaper_id}`));
+  const sel   = pairs.filter(p =>  _deliveryAssignSelected.has(`${p.r.id}:${p.s.newspaper_id}`));
+  document.getElementById('delivery-assign-unselected').innerHTML =
+    unsel.map(p => mkItem(p, false)).join('') || '<div class="empty" style="padding:10px;">なし</div>';
+  document.getElementById('delivery-assign-selected').innerHTML =
+    sel.map(p => mkItem(p, true)).join('') || '<div class="empty" style="padding:10px;">なし</div>';
+  const countEl = document.getElementById('da-selected-count');
+  if (countEl) countEl.textContent = `（${_deliveryAssignSelected.size}名）`;
+}
+
+function toggleDeliveryAssign(key) {
+  _deliveryAssignSelected.has(key) ? _deliveryAssignSelected.delete(key) : _deliveryAssignSelected.add(key);
+  renderDeliveryAssignLists();
+}
+
+async function saveDeliveryAssignments() {
+  const sid = document.getElementById('delivery-assign-staff-id').value;
+  const { start_year, start_month } = getMonthPicker('da-s');
+  const assignments = [..._deliveryAssignSelected].map(key => {
+    const [rid, nid] = key.split(':').map(Number);
+    return { reader_id: rid, newspaper_id: nid };
+  });
+  await api('PUT', `/staff/${sid}/delivery-assignments`, { assignments, start_year, start_month });
+  closeModal('modal-delivery-assignments');
+  await Promise.all([loadReaders(), renderStaff()]);
+}
+
+// ── Unit Prices ───────────────────────────────────────────────────────────
+async function loadUnitPrices() {
+  unitPrices = await api('GET', '/unit-prices');
+  renderPriceSections();
+}
+function renderPriceSections() {
+  const el = document.getElementById('price-sections');
+  if (!el) return;
+  let html = '';
+  for (const cat of FIXED_PRICE_CATS) {
+    const rows = unitPrices.filter(p=>p.category===cat.key);
+    html += `<div class="price-section">
+      <div class="price-header" style="background:${cat.color};border-radius:4px 4px 0 0;">${cat.label}</div>
+      <table class="price-table">
+        <thead><tr><th>開始年月</th><th>終了年月</th><th>金額（円）</th><th>備考</th><th></th></tr></thead>
+        <tbody>${rows.length ? rows.map(p=>`<tr>
+            <td>${p.start_year}年${p.start_month}月〜</td>
+            <td>${p.end_year?p.end_year+'年'+p.end_month+'月':'<span class="text-muted">現在</span>'}</td>
+            <td class="number-cell"><b>${Number(p.amount).toLocaleString()}円</b></td>
+            <td class="text-muted">${esc(p.note)}</td>
+            <td><button class="btn btn-danger btn-xs" onclick="deletePrice(${p.id})">削除</button></td>
+          </tr>`).join('') : '<tr><td colspan="5" class="empty" style="padding:8px;">登録なし</td></tr>'}
+        </tbody>
+      </table>
+      <div class="price-add-row">
+        <input type="number" placeholder="開始年" style="width:70px;" class="py" data-cat="${cat.key}">
+        <input type="number" placeholder="月" style="width:48px;" class="pm" min="1" max="12" data-cat="${cat.key}">
+        <span style="color:#888;">〜</span>
+        <input type="number" placeholder="終了年（空=現在）" style="width:96px;" class="ey" data-cat="${cat.key}">
+        <input type="number" placeholder="月" style="width:48px;" class="em" min="1" max="12" data-cat="${cat.key}">
+        <input type="number" placeholder="金額" style="width:76px;" class="amt" min="0" data-cat="${cat.key}">
+        <input type="text" placeholder="備考" style="width:110px;" class="note" data-cat="${cat.key}">
+        <button class="btn btn-primary btn-sm" onclick="addPrice('${cat.key}')">追加</button>
+      </div>
+    </div>`;
+  }
+  el.innerHTML = html;
+}
+async function addPrice(catKey) {
+  const ins = document.querySelectorAll(`[data-cat="${catKey}"]`);
+  const sy = parseInt(ins[0].value), sm = parseInt(ins[1].value);
+  const ey = ins[2].value?parseInt(ins[2].value):null;
+  const em = ins[3].value?parseInt(ins[3].value):null;
+  const amt = parseInt(ins[4].value)||0;
+  const note = ins[5].value.trim();
+  if (!sy||!sm) { alert('開始年月は必須です'); return; }
+  await api('POST', '/unit-prices', { category:catKey, start_year:sy, start_month:sm, end_year:ey, end_month:em, amount:amt, note });
+  await loadUnitPrices();
+}
+async function deletePrice(id) {
+  if (!confirm('この単価を削除しますか？')) return;
+  await api('DELETE', `/unit-prices/${id}`);
+  await loadUnitPrices();
+}
+
+// ── Subsidies ─────────────────────────────────────────────────────────────
+async function loadSubsidies() {
+  const year = parseInt(document.getElementById('sub-year').value);
+  const month = parseInt(document.getElementById('sub-month').value);
+  const data = await api('GET', `/subsidies?year=${year}&month=${month}`);
+  renderSubsidies(data, year, month);
+}
+function renderSubsidies(data, year, month) {
+  const ua = data.unaffiliated || [];
+  const sales = data.sales || [];
+  let html = '';
+
+  // ── 売上サマリー ──
+  if (sales.length) {
+    const totalRevenue = sales.reduce((s, r) => s + (r.revenue || 0), 0);
+    html += `<div style="margin-bottom:18px;">
+      <div style="font-size:15px;font-weight:700;color:#1a3a5c;margin-bottom:8px;border-bottom:2px solid #1565c0;padding-bottom:4px;">
+        ${year}年${month}月　新聞別購読状況
+      </div>
+      <table style="width:100%;border-collapse:collapse;font-size:13px;">
+        <thead><tr style="background:#eceff1;">
+          <th style="padding:6px 10px;text-align:left;border-bottom:2px solid #cfd8dc;">新聞</th>
+          <th style="padding:6px 10px;text-align:right;border-bottom:2px solid #cfd8dc;">部数</th>
+          <th style="padding:6px 10px;text-align:right;border-bottom:2px solid #cfd8dc;">購読単価</th>
+          <th style="padding:6px 10px;text-align:right;border-bottom:2px solid #cfd8dc;">購読料計</th>
+        </tr></thead>
+        <tbody>
+          ${sales.map((r,i) => {
+            const bg = i%2===1 ? 'background:#f5f9ff;' : '';
+            const priceStr = r.subscription_price !== null ? r.subscription_price.toLocaleString()+'円' : '—';
+            const revStr = r.revenue !== null ? r.revenue.toLocaleString()+'円' : '—';
+            return `<tr style="${bg}">
+              <td style="padding:6px 10px;border-bottom:1px solid #eceff1;">${esc(r.short_name)}　<span style="color:#888;font-size:12px;">${esc(r.name)}</span></td>
+              <td style="padding:6px 10px;text-align:right;border-bottom:1px solid #eceff1;">${r.total_qty}部</td>
+              <td style="padding:6px 10px;text-align:right;border-bottom:1px solid #eceff1;">${priceStr}</td>
+              <td style="padding:6px 10px;text-align:right;border-bottom:1px solid #eceff1;font-weight:600;">${revStr}</td>
+            </tr>`;
+          }).join('')}
+          <tr style="background:#e8f5e9;font-weight:700;">
+            <td style="padding:7px 10px;" colspan="3">合計</td>
+            <td style="padding:7px 10px;text-align:right;">${totalRevenue.toLocaleString()}円</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>`;
+  }
+
+  // ── 担当者未設定の警告 ──
+  const noDeliv = data.no_delivery || [];
+  const noColl  = data.no_collection || [];
+  if (noDeliv.length) {
+    html += `<div style="background:#fdecea;border:1px solid #f5c6cb;border-radius:4px;padding:8px 12px;margin-bottom:8px;font-size:13px;color:#c62828;">
+      ⚠ 配達担当が設定されていない読者がいます：${noDeliv.map(r=>esc(r.name)).join('、')}
+    </div>`;
+  }
+  if (noColl.length) {
+    html += `<div style="background:#fdecea;border:1px solid #f5c6cb;border-radius:4px;padding:8px 12px;margin-bottom:8px;font-size:13px;color:#c62828;">
+      ⚠ 集金担当が設定されていない読者がいます：${noColl.map(r=>esc(r.name)).join('、')}
+    </div>`;
+  }
+
+  // ── 個別配達集計（参考） ──
+  if (ua.length) {
+    const lines = ua.map(u => {
+      const priceStr = u.delivery_price
+        ? `${u.count}部×${u.delivery_price.toLocaleString()}円＝${u.amount.toLocaleString()}円`
+        : `${u.count}部（配達単価未設定）`;
+      return `${esc(u.short_name)} ${priceStr}`;
+    }).join('　／　');
+    html += `<div style="background:#e8f4fd;border:1px solid #b3d7f0;border-radius:4px;padding:8px 12px;margin-bottom:14px;font-size:13px;color:#1a5276;">
+      個別配達集計（参考）：${lines}
+    </div>`;
+  }
+
+  // ── 援助金明細 ──
+  if (data.staff && data.staff.length) {
+    const grandTotal = data.staff.reduce((s, p) => s + p.total, 0);
+    html += `<div style="margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+      <div style="font-size:15px;font-weight:700;color:#1a3a5c;border-bottom:2px solid #1565c0;padding-bottom:4px;flex:1;">援助金明細</div>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-warning btn-sm" onclick="openAdjModal()">＋ 調整を追加</button>
+        <button class="btn btn-success btn-sm" onclick="exportSubsidies()">Excel出力（担当者別印刷用）</button>
+      </div>
+    </div>
+    <div style="margin-bottom:14px;padding:8px 14px;background:#e8f5e9;border-radius:4px;font-size:13px;font-weight:700;color:#2e7d32;">
+      援助金合計：${grandTotal.toLocaleString()}円
+    </div>`;
+    for (const s of data.staff) {
+      const roles = [];
+      if (s.is_deliverer) roles.push('配達');
+      if (s.is_collector) roles.push('集金');
+      html += `<div class="subsidy-block">
+        <div class="subsidy-name">
+          <span>${esc(s.staff_name)}　<span class="text-muted" style="font-size:12px;">${roles.join('・')}</span></span>
+          <span class="subsidy-total">合計 ${s.total.toLocaleString()}円</span>
+        </div>
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th>項目</th><th>件数</th><th>単価（円）</th><th>金額（円）</th></tr></thead>
+            <tbody>
+              ${s.lines.map(l=>`<tr>
+                <td>${esc(l.label)}</td>
+                <td class="number-cell">${l.count}</td>
+                <td class="number-cell">${l.unit.toLocaleString()}</td>
+                <td class="number-cell"><b>${l.amount.toLocaleString()}</b></td>
+              </tr>`).join('')}
+              ${s.adjustments.map(adj=>`<tr class="adj-row">
+                <td colspan="3">【調整】${esc(adj.note)}</td>
+                <td class="number-cell ${adj.amount>=0?'positive':'negative'}">
+                  ${adj.amount>=0?'+':''}${adj.amount.toLocaleString()}
+                  <button class="btn btn-danger btn-xs" onclick="deleteAdj(${adj.id})">✕</button>
+                </td>
+              </tr>`).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>`;
+    }
+  }
+
+  document.getElementById('subsidy-content').innerHTML = html || '<div class="empty">データがありません。年月を選択して「計算」を押してください。</div>';
+}
+async function exportSubsidies() {
+  const year = document.getElementById('sub-year').value;
+  const month = document.getElementById('sub-month').value;
+  window.location.href = `/api/subsidies/export?year=${year}&month=${month}`;
+}
+
+// ── Adjustments ───────────────────────────────────────────────────────────
+function openAdjModal() {
+  document.getElementById('adj-amount').value = 0;
+  document.getElementById('adj-note').value = '';
+  document.getElementById('adj-staff-id').innerHTML = staffList.map(s=>`<option value="${s.id}">${esc(s.name)}</option>`).join('');
+  openModal('modal-adj');
+}
+async function saveAdj() {
+  const year = parseInt(document.getElementById('sub-year').value);
+  const month = parseInt(document.getElementById('sub-month').value);
+  const body = {
+    year, month,
+    staff_id: parseInt(document.getElementById('adj-staff-id').value),
+    role: document.getElementById('adj-role').value,
+    amount: parseInt(document.getElementById('adj-amount').value)||0,
+    note: document.getElementById('adj-note').value.trim(),
+  };
+  await api('POST', '/adjustments', body);
+  closeModal('modal-adj');
+  await loadSubsidies();
+}
+async function deleteAdj(id) {
+  if (!confirm('この調整を削除しますか？')) return;
+  await api('DELETE', `/adjustments/${id}`);
+  await loadSubsidies();
+}
+</script>
+</body>
+</html>
