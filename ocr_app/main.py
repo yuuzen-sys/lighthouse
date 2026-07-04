@@ -341,9 +341,9 @@ def import_stores(data: StoreImport):
               if (s := _parse_store_line(line))]
 
     with get_conn() as conn:
-        conn.execute("DELETE FROM stores")
         conn.executemany(
-            "INSERT INTO stores (code, name) VALUES (:code, :name)",
+            """INSERT INTO stores (code, name) VALUES (:code, :name)
+               ON CONFLICT(code) DO UPDATE SET name = excluded.name""",
             stores
         )
 
