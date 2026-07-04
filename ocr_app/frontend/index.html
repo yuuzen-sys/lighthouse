@@ -562,6 +562,18 @@
     <div class="tab-content" id="tab-data">
       <div style="display:flex;flex-direction:column;gap:16px">
 
+        <!-- 孤立写真回収 -->
+        <div style="background:#eff6ff;border:1px solid #93c5fd;border-radius:8px;padding:12px 14px">
+          <div style="font-size:13px;font-weight:700;color:#1e3a5f;margin-bottom:6px">📦 孤立写真の回収</div>
+          <div style="font-size:12px;color:#555;margin-bottom:10px">店舗インポートの全置き換えで削除された店舗に紐付いていた写真を、現在の店舗へ再割り当てします。</div>
+          <button class="btn btn-outline btn-sm" onclick="loadOrphanedGroups()">孤立写真を確認する</button>
+          <div id="orphan-panel" style="display:none;margin-top:12px">
+            <div id="orphan-summary" style="font-size:12px;color:#555;margin-bottom:8px"></div>
+            <div id="orphan-groups" style="display:flex;flex-direction:column;gap:8px"></div>
+            <button class="btn btn-primary btn-sm" style="margin-top:10px" onclick="doReassign()">再割り当て実行</button>
+          </div>
+        </div>
+
         <div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:12px 14px;font-size:13px;color:#7f1d1d;line-height:1.75">
           ⚠ <b>全件削除</b>は取り消せません。<br>
           登録済みの全店舗・全写真ファイル・全OCR解析結果が完全に削除されます。<br>
@@ -1922,6 +1934,83 @@ async function doAllDelete() {
     toast('削除エラー: ' + err.message);
     btn.disabled = false; btn.textContent = '🗑 全店舗・全写真データを削除する';
   }
+}
+
+// ── Orphaned photo recovery ────────────────────────────────────────────────
+let _orphanData = null;
+
+async function loadOrphanedGroups() {
+  const panel = document.getElementById('orphan-panel');
+  const summary = document.getElementById('orphan-summary');
+  const groupsEl = document.getElementById('orphan-groups');
+
+  summary.textContent = '確認中...';
+  panel.style.display = '';
+  groupsEl.innerHTML = '';
+
+  try {
+    _orphanData = await apiFetch('/api/orphaned-groups');
+  } catch (err) {
+    summary.textContent = 'エラー: ' + err.message;
+    return;
+  }
+
+  if (!_orphanData.total) {
+    summary.textContent = '孤立写真はありません。';
+    return;
+  }
+
+  summary.textContent = `孤立写真: ${_orphanData.total}枚（${_orphanData.groups.length}グループ）`;
+
+  const storeOpts = _orphanData.stores
+    .map(s => `<option value="${s.id}">${s.code ? `【${s.code}】` : ''}${s.name}</option>`)
+    .join('');
+
+  _orphanData.groups.forEach(g => {
+    const autoMatch = g.hint_code
+      ? _orphanData.stores.find(s => s.code === g.hint_code)
+      : null;
+    const samplesHtml = g.samples
+      .map(f => `<div style="font-size:11px;color:#888;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${f}</div>`)
+      .join('');
+
+    const card = document.createElement('div');
+    card.style.cssText = 'background:#fff;border:1px solid #dde3ed;border-radius:6px;padding:10px 12px;font-size:12px';
+    card.innerHTML = `
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px">
+        <span style="font-weight:700;color:#1e3a5f">${g.count}枚</span>
+        ${g.hint_code ? `<span style="background:#eff6ff;border:1px solid #93c5fd;border-radius:4px;padding:1px 6px;font-size:11px;color:#1e40af">コードヒント: 【${g.hint_code}】</span>` : '<span style="color:#aaa">ヒントなし</span>'}
+        <select data-old="${g.old_store_id}" style="flex:1;min-width:160px;padding:4px 6px;border:1px solid #ccc;border-radius:5px;font-size:12px">
+          <option value="">— 割り当て先を選択 —</option>
+          ${storeOpts}
+        </select>
+      </div>
+      <div>${samplesHtml}</div>`;
+
+    if (autoMatch) {
+      card.querySelector('select').value = autoMatch.id;
+    }
+    groupsEl.appendChild(card);
+  });
+}
+
+async function doReassign() {
+  const selects = document.querySelectorAll('#orphan-groups select[data-old]');
+  const mappings = [];
+  for (const sel of selects) {
+    if (!sel.value) { toast('すべてのグループに割り当て先を選択してください'); return; }
+    mappings.push({ old_store_id: parseInt(sel.dataset.old) || null, new_store_id: parseInt(sel.value) });
+  }
+  if (!mappings.length) return;
+  const data = await apiFetch('/api/reassign-photos', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ mappings }),
+  });
+  toast(`${data.updated}枚を再割り当てしました`);
+  await loadOrphanedGroups();
+  await loadStores();
+  loadPhotos(currentStoreId);
 }
 
 // ── Store import ───────────────────────────────────────────────────────────

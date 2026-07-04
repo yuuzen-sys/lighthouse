@@ -350,6 +350,64 @@ def import_stores(data: StoreImport):
     return {"imported": len(stores)}
 
 
+@app.get("/api/orphaned-groups")
+def get_orphaned_groups():
+    """Return photos grouped by orphaned store_id (store deleted after import)."""
+    with get_conn() as conn:
+        rows = conn.execute("""
+            SELECT p.store_id AS old_store_id,
+                   COUNT(*) AS count,
+                   GROUP_CONCAT(COALESCE(p.renamed_filename, p.original_filename), '|||') AS filenames
+            FROM photos p
+            LEFT JOIN stores s ON p.store_id = s.id
+            WHERE s.id IS NULL
+            GROUP BY p.store_id
+            ORDER BY COUNT(*) DESC
+        """).fetchall()
+        current_stores = conn.execute("SELECT id, code, name FROM stores ORDER BY code").fetchall()
+
+    groups = []
+    for row in rows:
+        d = dict(row)
+        all_names = [n for n in (d["filenames"] or "").split("|||") if n]
+        hint_code = None
+        for fname in all_names:
+            m = re.match(r"【([^】]+)】", fname)
+            if m:
+                hint_code = m.group(1)
+                break
+        groups.append({
+            "old_store_id": d["old_store_id"],
+            "count": d["count"],
+            "hint_code": hint_code,
+            "samples": all_names[:3],
+        })
+
+    return {
+        "groups": groups,
+        "total": sum(g["count"] for g in groups),
+        "stores": [dict(s) for s in current_stores],
+    }
+
+
+class ReassignRequest(BaseModel):
+    mappings: list[dict]  # [{old_store_id, new_store_id}]
+
+
+@app.post("/api/reassign-photos")
+def reassign_photos(req: ReassignRequest):
+    """Bulk reassign orphaned photos to their correct stores."""
+    total = 0
+    with get_conn() as conn:
+        for m in req.mappings:
+            r = conn.execute(
+                "UPDATE photos SET store_id = ? WHERE store_id = ?",
+                (m["new_store_id"], m["old_store_id"])
+            )
+            total += r.rowcount
+    return {"updated": total}
+
+
 @app.get("/api/stores")
 def list_stores():
     with get_conn() as conn:
