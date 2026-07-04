@@ -236,6 +236,7 @@
           <button class="btn btn-outline btn-sm" onclick="selectAllPending()">未処理全選択</button>
           <button class="btn btn-outline btn-sm" onclick="exitSelectionMode()">✕ キャンセル</button>
           <button class="btn btn-success btn-sm" id="analyze-sel-btn" onclick="analyzeSelected()" disabled>▶ 一括解析</button>
+          <button class="btn btn-warning btn-sm" id="unused-sel-btn" onclick="bulkMarkUnused()" disabled>🗑 不使用リネーム</button>
         </span>
       </div>
       <div class="progress-wrap" id="progress-wrap" style="display:none">
@@ -458,7 +459,7 @@
       <button class="btn btn-warning btn-sm" onclick="runAnalysis()">🔍 解析</button>
       <button class="btn btn-outline btn-sm" onclick="savePhoto()">保存</button>
       <button class="btn btn-primary btn-sm" onclick="addRenameSegment()">＋ 追加</button>
-      <button class="btn btn-success" onclick="confirmPhoto()">✓ 確定・リネーム</button>
+      <button class="btn btn-success" id="btn-confirm" onclick="confirmPhoto()">✓ 確定・リネーム</button>
     </div>
     <div class="modal-footer hidden" id="crop-footer">
       <span style="font-size:12px;color:#555;margin-right:auto" id="crop-count-label">範囲: 0件</span>
@@ -1310,6 +1311,7 @@ function togglePhotoSelection(id) {
 function _updateSelCount() {
   document.getElementById('sel-count').textContent = `${_selIds.size}枚選択`;
   document.getElementById('analyze-sel-btn').disabled = _selIds.size === 0;
+  document.getElementById('unused-sel-btn').disabled  = _selIds.size === 0;
 }
 
 function selectAllPending() {
@@ -1329,6 +1331,23 @@ async function analyzeSelected() {
   toast(`${ids.length}枚をバックグラウンド解析キューに追加しました`);
   await loadPhotos(currentStoreId);
   startPolling();
+}
+
+async function bulkMarkUnused() {
+  if (!_selIds.size) return;
+  const prefix = _storePrefix();
+  const unusedName = prefix ? `${prefix} 不使用` : '不使用';
+  const ids = [..._selIds];
+  exitSelectionMode();
+  await Promise.all(ids.map(id =>
+    apiFetch(`/api/photos/${id}/confirm`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ renamed_filename: unusedName }),
+    }).catch(() => {})
+  ));
+  toast(`${ids.length}枚を「不使用」としてリネームしました`);
+  await loadPhotos(currentStoreId);
 }
 
 // ── Device select ──────────────────────────────────────────────────────────
@@ -2687,6 +2706,7 @@ function enterCropMode() {
   document.getElementById('zoom-ctrl')     .style.display = '';   // ズーム操作は残す
   document.getElementById('normal-footer') .classList.add('hidden');
   document.getElementById('crop-footer')   .classList.remove('hidden');
+  document.getElementById('btn-confirm')   .disabled = true;
   document.getElementById('form-panel')    .style.display = 'none';
   document.getElementById('crop-panel')    .style.display = 'flex';
 
@@ -2703,6 +2723,7 @@ function exitCropMode() {
   document.getElementById('zoom-ctrl')     .style.display = '';
   document.getElementById('normal-footer') .classList.remove('hidden');
   document.getElementById('crop-footer')   .classList.add('hidden');
+  document.getElementById('btn-confirm')   .disabled = false;
   document.getElementById('form-panel')    .style.display = '';
   document.getElementById('crop-panel')    .style.display = 'none';
 }
