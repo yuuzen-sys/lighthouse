@@ -38,8 +38,10 @@ class SubscriptionIn(BaseModel):
     payment_method: str = "cash"
     start_year: Optional[int] = None
     start_month: Optional[int] = None
+    start_day: Optional[int] = None
     end_year: Optional[int] = None
     end_month: Optional[int] = None
+    end_day: Optional[int] = None
     plan_note: str = ""
 
 class StaffIn(BaseModel):
@@ -193,7 +195,7 @@ def list_readers():
         for r in readers:
             subs = conn.execute("""
                 SELECT s.id, s.reader_id, s.newspaper_id, s.quantity, s.status, s.payment_method,
-                       s.start_year, s.start_month, s.end_year, s.end_month, s.plan_note,
+                       s.start_year, s.start_month, s.start_day, s.end_year, s.end_month, s.end_day, s.plan_note,
                        n.name as newspaper_name, n.short_name, n.newspaper_type, n.is_print
                 FROM subscriptions s
                 JOIN newspapers n ON n.id = s.newspaper_id
@@ -279,10 +281,10 @@ def update_subscriptions(rid: int, body: List[SubscriptionIn]):
             conn.execute(
                 """INSERT INTO subscriptions
                    (reader_id, newspaper_id, quantity, status, payment_method,
-                    start_year, start_month, end_year, end_month, plan_note)
-                   VALUES (?,?,?,?,?,?,?,?,?,?)""",
+                    start_year, start_month, start_day, end_year, end_month, end_day, plan_note)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (rid, s.newspaper_id, qty, s.status, s.payment_method,
-                 s.start_year, s.start_month, s.end_year, s.end_month, s.plan_note)
+                 s.start_year, s.start_month, s.start_day, s.end_year, s.end_month, s.end_day, s.plan_note)
             )
     return {"ok": True}
 
@@ -291,12 +293,12 @@ def get_subscription_history(rid: int):
     with get_conn() as conn:
         rows = conn.execute("""
             SELECT s.id, s.newspaper_id, s.quantity, s.status, s.payment_method,
-                   s.start_year, s.start_month, s.end_year, s.end_month, s.plan_note,
+                   s.start_year, s.start_month, s.start_day, s.end_year, s.end_month, s.end_day, s.plan_note,
                    n.name as newspaper_name, n.short_name
             FROM subscriptions s
             JOIN newspapers n ON n.id = s.newspaper_id
             WHERE s.reader_id=?
-            ORDER BY s.start_year, s.start_month, n.sort_order, n.id
+            ORDER BY s.start_year, s.start_month, s.start_day, n.sort_order, n.id
         """, (rid,)).fetchall()
         return [dict(r) for r in rows]
 
@@ -306,10 +308,11 @@ def add_subscription_history(rid: int, body: SubscriptionIn):
         qty = max(1, body.quantity) if body.quantity else 1
         cur = conn.execute("""
             INSERT INTO subscriptions (reader_id, newspaper_id, quantity, status, payment_method,
-                start_year, start_month, end_year, end_month, plan_note)
-            VALUES (?,?,?,?,?,?,?,?,?,?)
+                start_year, start_month, start_day, end_year, end_month, end_day, plan_note)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
         """, (rid, body.newspaper_id, qty, body.status, body.payment_method,
-              body.start_year, body.start_month, body.end_year, body.end_month, body.plan_note))
+              body.start_year, body.start_month, body.start_day,
+              body.end_year, body.end_month, body.end_day, body.plan_note))
         return {"id": cur.lastrowid}
 
 @app.delete("/api/subscriptions/{sid}")

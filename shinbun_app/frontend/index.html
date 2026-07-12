@@ -238,11 +238,10 @@ td { padding: 9px 12px; border-bottom: 1px solid #eee; vertical-align: middle; f
         <div style="font-weight:600;margin-bottom:6px;color:#555;">履歴を追加</div>
         <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:4px;">
           <select id="rsh-np" style="padding:3px 6px;border:1px solid #ccc;border-radius:3px;font-size:12px;"></select>
-          <input type="number" id="rsh-sy" placeholder="開始年" style="width:64px;font-size:12px;padding:2px 6px;border:1px solid #ccc;border-radius:3px;">年
-          <select id="rsh-sm" style="font-size:12px;padding:2px 4px;border:1px solid #ccc;border-radius:3px;"></select>月〜
-          <input type="number" id="rsh-ey" placeholder="終了年" style="width:64px;font-size:12px;padding:2px 6px;border:1px solid #ccc;border-radius:3px;">年
-          <select id="rsh-em" style="font-size:12px;padding:2px 4px;border:1px solid #ccc;border-radius:3px;"></select>月
-          <span style="font-size:11px;color:#aaa;">（空欄=現在も有効）</span>
+          <input type="date" id="rsh-start-date" style="font-size:12px;padding:2px 4px;border:1px solid #ccc;border-radius:3px;">
+          〜
+          <input type="date" id="rsh-end-date" style="font-size:12px;padding:2px 4px;border:1px solid #ccc;border-radius:3px;">
+          <span style="font-size:11px;color:#aaa;">（終了日空欄=現在も有効）</span>
         </div>
         <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;">
           <label style="font-size:12px;">部数<input type="number" id="rsh-qty" value="1" min="1" style="width:44px;font-size:12px;padding:2px 4px;border:1px solid #ccc;border-radius:3px;margin-left:4px;"></label>
@@ -1080,7 +1079,7 @@ function renderSubTags(subs) {
   return subs.map(s => {
     const cls = s.status === 'inactive' ? 'tag-inactive' : 'tag-active';
     const qtyStr = (s.quantity && s.quantity > 1) ? `×${s.quantity}` : '';
-    const periodStr = fmtPeriod(s.start_year, s.start_month, s.end_year, s.end_month);
+    const periodStr = fmtPeriod(s.start_year, s.start_month, s.start_day, s.end_year, s.end_month, s.end_day);
     const title = `${s.newspaper_name}（${s.is_print?'紙版':'電子版'}）${qtyStr?' '+s.quantity+'部':''}${periodStr?' '+periodStr:''}`;
     const periodBadge = periodStr
       ? `<span style="font-size:10px;color:inherit;opacity:.75;margin-left:2px;">${periodStr}</span>`
@@ -1089,10 +1088,10 @@ function renderSubTags(subs) {
   }).join(' ');
 }
 
-function fmtPeriod(sy, sm, ey, em) {
+function fmtPeriod(sy, sm, sd, ey, em, ed) {
   if (!sy && !ey) return '';
-  const start = sy ? `${sy}年${sm||'?'}月` : '';
-  const end   = ey ? `${ey}年${em||'?'}月` : '継続中';
+  const start = sy ? `${sy}年${sm||'?'}月${sd?sd+'日':''}` : '';
+  const end   = ey ? `${ey}年${em||'?'}月${ed?ed+'日':''}` : '継続中';
   return start ? `${start}〜${end}` : `〜${end}`;
 }
 
@@ -1137,7 +1136,7 @@ async function openReaderModal(id) {
   document.getElementById('r-note').value = r?r.note:'';
   document.getElementById('sub-editor').innerHTML = '';
   renderSubAddButtons();
-  (r?r.subscriptions:[]).forEach(s => addSubRow(s.newspaper_id, s.status, s.quantity, s.start_year, s.start_month, s.end_year, s.end_month, s.payment_method));
+  (r?r.subscriptions:[]).forEach(s => addSubRow(s.newspaper_id, s.status, s.quantity, s.start_year, s.start_month, s.start_day, s.end_year, s.end_month, s.end_day, s.payment_method));
   const sec   = document.getElementById('r-course-section');
   const dsec  = document.getElementById('r-delivery-section');
   const csec  = document.getElementById('r-collection-section');
@@ -1182,12 +1181,9 @@ function _initSubHistoryForm() {
   const npSel = document.getElementById('rsh-np');
   npSel.innerHTML = newspapers.map(n => `<option value="${n.id}">${esc(n.name)}</option>`).join('');
   const now = new Date();
-  const smSel = document.getElementById('rsh-sm');
-  const emSel = document.getElementById('rsh-em');
-  smSel.innerHTML = Array.from({length:12},(_,i)=>i+1).map(m=>`<option value="${m}"${m===now.getMonth()+1?' selected':''}>${m}</option>`).join('');
-  emSel.innerHTML = '<option value="">—</option>' + Array.from({length:12},(_,i)=>i+1).map(m=>`<option value="${m}">${m}</option>`).join('');
-  document.getElementById('rsh-sy').value = now.getFullYear();
-  document.getElementById('rsh-ey').value = '';
+  const y = now.getFullYear(), m = String(now.getMonth()+1).padStart(2,'0'), d = String(now.getDate()).padStart(2,'0');
+  document.getElementById('rsh-start-date').value = `${y}-${m}-${d}`;
+  document.getElementById('rsh-end-date').value = '';
   document.getElementById('rsh-qty').value = 1;
   document.getElementById('rsh-status').value = 'active';
   document.getElementById('rsh-pay').value = 'cash';
@@ -1200,8 +1196,8 @@ function renderSubHistory(rid, allSubs) {
     return;
   }
   tbody.innerHTML = allSubs.map(s => {
-    const startStr = s.start_year ? `${s.start_year}年${s.start_month}月` : '—';
-    const endStr   = s.end_year   ? `${s.end_year}年${s.end_month}月`   : '現在';
+    const startStr = s.start_year ? `${s.start_year}年${s.start_month}月${s.start_day?s.start_day+'日':''}` : '—';
+    const endStr   = s.end_year   ? `${s.end_year}年${s.end_month}月${s.end_day?s.end_day+'日':''}` : '現在';
     const statusLabel = s.status === 'inactive' ? '<span style="color:#e53935;">休止中</span>' : '購読中';
     return `<tr>
       <td style="padding:4px 6px;border:1px solid #eee;">${esc(s.newspaper_name)}</td>
@@ -1220,17 +1216,15 @@ async function addSubHistory() {
   const rid = document.getElementById('reader-id').value;
   if (!rid) return;
   const npId = parseInt(document.getElementById('rsh-np').value);
-  const sy = parseInt(document.getElementById('rsh-sy').value) || null;
-  const sm = parseInt(document.getElementById('rsh-sm').value) || null;
-  const eyVal = document.getElementById('rsh-ey').value;
-  const emVal = document.getElementById('rsh-em').value;
-  const ey = eyVal ? parseInt(eyVal) : null;
-  const em = emVal ? parseInt(emVal) : null;
-  if (!sy || !sm) { alert('開始年月は必須です'); return; }
+  const sv = document.getElementById('rsh-start-date').value;
+  const ev = document.getElementById('rsh-end-date').value;
+  if (!sv) { alert('開始日は必須です'); return; }
+  const [sy,sm,sd] = sv.split('-').map(Number);
+  const [ey,em,ed] = ev ? ev.split('-').map(Number) : [null,null,null];
   await api('POST', `/readers/${rid}/subscription-history`, {
     newspaper_id: npId,
-    start_year: sy, start_month: sm,
-    end_year: ey, end_month: em,
+    start_year: sy, start_month: sm, start_day: sd,
+    end_year: ey||null, end_month: em||null, end_day: ed||null,
     quantity: parseInt(document.getElementById('rsh-qty').value) || 1,
     status: document.getElementById('rsh-status').value,
     payment_method: document.getElementById('rsh-pay').value,
@@ -1248,7 +1242,7 @@ async function deleteSubHistory(rid, sid) {
   await loadReaders();
 }
 
-function addSubRow(newspaper_id, status, qty, sy, sm, ey, em, payment_method) {
+function addSubRow(newspaper_id, status, qty, sy, sm, sd, ey, em, ed, payment_method) {
   const nid = parseInt(newspaper_id);
   const np = newspapers.find(n => n.id === nid);
   if (!np) { alert('新聞が見つかりません'); return; }
@@ -1278,14 +1272,10 @@ function addSubRow(newspaper_id, status, qty, sy, sm, ey, em, payment_method) {
     </div>
     <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:4px;padding-left:4px;">
       <span style="font-size:11px;color:#888;">購読期間：</span>
-      <input type="number" class="sub-sy" placeholder="開始年" value="${sy||''}" style="width:64px;font-size:12px;padding:2px 6px;border:1px solid #ccc;border-radius:3px;">
-      年
-      <input type="number" class="sub-sm" placeholder="月" min="1" max="12" value="${sm||''}" style="width:44px;font-size:12px;padding:2px 6px;border:1px solid #ccc;border-radius:3px;">
-      月〜
-      <input type="number" class="sub-ey" placeholder="終了年" value="${ey||''}" style="width:64px;font-size:12px;padding:2px 6px;border:1px solid #ccc;border-radius:3px;">
-      年
-      <input type="number" class="sub-em" placeholder="月" min="1" max="12" value="${em||''}" style="width:44px;font-size:12px;padding:2px 6px;border:1px solid #ccc;border-radius:3px;">
-      月<span style="font-size:11px;color:#aaa;">（空欄=自動延長）</span>
+      <input type="date" class="sub-start-date" value="${sy&&sm?`${sy}-${String(sm).padStart(2,'0')}-${String(sd||1).padStart(2,'0')}`:''}" style="font-size:12px;padding:2px 4px;border:1px solid #ccc;border-radius:3px;">
+      〜
+      <input type="date" class="sub-end-date" value="${ey&&em?`${ey}-${String(em).padStart(2,'0')}-${String(ed||1).padStart(2,'0')}`:''}" style="font-size:12px;padding:2px 4px;border:1px solid #ccc;border-radius:3px;">
+      <span style="font-size:11px;color:#aaa;">（終了日空欄=自動延長）</span>
     </div>`;
   document.getElementById('sub-editor').appendChild(div);
 }
@@ -1400,10 +1390,14 @@ async function saveReader() {
       quantity: parseInt(row.querySelector('.sub-qty').value) || 1,
       status: row.querySelector('.sub-status').value,
       payment_method: row.querySelector('.sub-pay').value,
-      start_year: parseInt(row.querySelector('.sub-sy').value) || null,
-      start_month: parseInt(row.querySelector('.sub-sm').value) || null,
-      end_year: parseInt(row.querySelector('.sub-ey').value) || null,
-      end_month: parseInt(row.querySelector('.sub-em').value) || null,
+      ...(() => {
+        const sv = row.querySelector('.sub-start-date').value;
+        const ev = row.querySelector('.sub-end-date').value;
+        const [sy,sm,sd] = sv ? sv.split('-').map(Number) : [null,null,null];
+        const [ey,em,ed] = ev ? ev.split('-').map(Number) : [null,null,null];
+        return {start_year:sy||null,start_month:sm||null,start_day:sd||null,
+                end_year:ey||null,end_month:em||null,end_day:ed||null};
+      })(),
     }))
   );
   closeModal('modal-reader');

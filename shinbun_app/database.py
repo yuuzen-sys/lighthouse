@@ -60,13 +60,14 @@ def init_db():
                 newspaper_id INTEGER NOT NULL REFERENCES newspapers(id) ON DELETE CASCADE,
                 quantity INTEGER NOT NULL DEFAULT 1,     -- 部数
                 status TEXT DEFAULT 'active',            -- active / active_no_collection / inactive
-                start_year INTEGER DEFAULT NULL,         -- 購読開始年（NULL=設定なし）
-                start_month INTEGER DEFAULT NULL,        -- 購読開始月
-                end_year INTEGER DEFAULT NULL,           -- 購読終了年（NULL=自動延長）
-                end_month INTEGER DEFAULT NULL,          -- 購読終了月
+                start_year INTEGER DEFAULT NULL,
+                start_month INTEGER DEFAULT NULL,
+                start_day INTEGER DEFAULT NULL,
+                end_year INTEGER DEFAULT NULL,
+                end_month INTEGER DEFAULT NULL,
+                end_day INTEGER DEFAULT NULL,
                 payment_method TEXT DEFAULT 'cash',  -- cash / transfer（振込等）
-                plan_note TEXT DEFAULT '',
-                UNIQUE(reader_id, newspaper_id)
+                plan_note TEXT DEFAULT ''
             );
 
             CREATE TABLE IF NOT EXISTS staff (
@@ -181,14 +182,19 @@ def init_db():
             "ALTER TABLE subscriptions ADD COLUMN quantity INTEGER NOT NULL DEFAULT 1",
             "ALTER TABLE subscriptions ADD COLUMN start_year INTEGER DEFAULT NULL",
             "ALTER TABLE subscriptions ADD COLUMN start_month INTEGER DEFAULT NULL",
+            "ALTER TABLE subscriptions ADD COLUMN start_day INTEGER DEFAULT NULL",
             "ALTER TABLE subscriptions ADD COLUMN end_year INTEGER DEFAULT NULL",
             "ALTER TABLE subscriptions ADD COLUMN end_month INTEGER DEFAULT NULL",
+            "ALTER TABLE subscriptions ADD COLUMN end_day INTEGER DEFAULT NULL",
             "ALTER TABLE subscriptions ADD COLUMN payment_method TEXT DEFAULT 'cash'",
         ]:
             try:
                 conn.execute(sql)
             except Exception:
                 pass
+        # 既存データの start_day/end_day を 1 に設定（未設定のもののみ）
+        conn.execute("UPDATE subscriptions SET start_day=1 WHERE start_year IS NOT NULL AND start_day IS NULL")
+        conn.execute("UPDATE subscriptions SET end_day=1 WHERE end_year IS NOT NULL AND end_day IS NULL")
 
         # subscriptions の UNIQUE(reader_id, newspaper_id) 制約を外す（期間履歴対応）
         sub_idx = conn.execute("PRAGMA index_list(subscriptions)").fetchall()
@@ -203,17 +209,24 @@ def init_db():
                     status TEXT DEFAULT 'active',
                     start_year INTEGER DEFAULT NULL,
                     start_month INTEGER DEFAULT NULL,
+                    start_day INTEGER DEFAULT NULL,
                     end_year INTEGER DEFAULT NULL,
                     end_month INTEGER DEFAULT NULL,
+                    end_day INTEGER DEFAULT NULL,
                     payment_method TEXT DEFAULT 'cash',
                     plan_note TEXT DEFAULT ''
                 )
             """)
             conn.execute("""
                 INSERT INTO subscriptions (id, reader_id, newspaper_id, quantity, status,
-                    start_year, start_month, end_year, end_month, payment_method, plan_note)
+                    start_year, start_month, start_day, end_year, end_month, end_day,
+                    payment_method, plan_note)
                 SELECT id, reader_id, newspaper_id, quantity, status,
-                    start_year, start_month, end_year, end_month, payment_method, plan_note
+                    start_year, start_month,
+                    CASE WHEN start_year IS NOT NULL THEN 1 ELSE NULL END,
+                    end_year, end_month,
+                    CASE WHEN end_year IS NOT NULL THEN 1 ELSE NULL END,
+                    payment_method, plan_note
                 FROM _subs_old
             """)
             conn.execute("DROP TABLE _subs_old")
