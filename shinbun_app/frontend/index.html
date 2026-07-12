@@ -302,8 +302,8 @@ td { padding: 9px 12px; border-bottom: 1px solid #eee; vertical-align: middle; f
     <div class="form-group" style="margin-bottom:10px;">
       <label>役割（複数選択可）</label>
       <div class="flex-row" style="margin-top:4px;">
-        <label style="display:flex;align-items:center;gap:4px;font-size:13px;cursor:pointer;"><input type="checkbox" id="s-deliverer"> 配達担当</label>
-        <label style="display:flex;align-items:center;gap:4px;font-size:13px;cursor:pointer;"><input type="checkbox" id="s-collector"> 集金担当</label>
+        <label style="display:flex;align-items:center;gap:4px;font-size:13px;cursor:pointer;"><input type="checkbox" id="s-deliverer" onchange="toggleStaffSection('delivery')"> 配達担当</label>
+        <label style="display:flex;align-items:center;gap:4px;font-size:13px;cursor:pointer;"><input type="checkbox" id="s-collector" onchange="toggleStaffSection('collection')"> 集金担当</label>
       </div>
     </div>
     <div id="s-delivery-section" style="display:none;margin-bottom:14px;">
@@ -1489,6 +1489,20 @@ async function renderStaff() {
     html += `</div></div>`;
   }
   el.innerHTML = html;
+}
+
+function toggleStaffSection(type) {
+  if (type === 'delivery') {
+    const checked = document.getElementById('s-deliverer').checked;
+    const sec = document.getElementById('s-delivery-section');
+    sec.style.display = checked ? '' : 'none';
+    if (checked) populateMonthPicker('s-del-s');
+  } else {
+    const checked = document.getElementById('s-collector').checked;
+    const sec = document.getElementById('s-collection-section');
+    sec.style.display = checked ? '' : 'none';
+    if (checked) populateMonthPicker('s-col-s');
+  }
 }
 
 async function openStaffModal(id) {
