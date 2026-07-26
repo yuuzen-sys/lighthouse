@@ -6,6 +6,12 @@ from typing import List, Optional
 from pathlib import Path
 import io
 import datetime
+
+# ── 一時的な「現在日付」オーバーライド（2025年入力完了後に削除） ──────────
+_FAKE_TODAY = datetime.date(2025, 12, 31)
+def _today() -> datetime.date:
+    return _FAKE_TODAY if _FAKE_TODAY else _today()
+# ───────────────────────────────────────────────────────────────────────────
 import openpyxl
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 try:
@@ -127,7 +133,7 @@ def _np_price_at(conn, nid: int, year: int, month: int) -> dict:
 
 @app.get("/api/newspapers")
 def list_newspapers():
-    now = datetime.date.today()
+    now = _today()
     cy, cm = now.year, now.month
     with get_conn() as conn:
         rows = conn.execute("SELECT * FROM newspapers ORDER BY sort_order, id").fetchall()
@@ -187,7 +193,7 @@ def delete_newspaper_price(pid: int):
 
 @app.get("/api/readers")
 def list_readers():
-    now = datetime.date.today()
+    now = _today()
     cy, cm = now.year, now.month
     with get_conn() as conn:
         readers = conn.execute("SELECT * FROM readers ORDER BY id").fetchall()
@@ -268,7 +274,7 @@ def delete_reader(rid: int):
 
 @app.put("/api/readers/{rid}/subscriptions")
 def update_subscriptions(rid: int, body: List[SubscriptionIn]):
-    now = datetime.date.today()
+    now = _today()
     cy, cm = now.year, now.month
     with get_conn() as conn:
         # 現在月以降の行（open-endedを含む）を削除。過去データ（end < 今月）は保持。
@@ -449,7 +455,7 @@ def delete_course_price(pid: int):
 
 @app.get("/api/staff/{sid}/assignments")
 def get_assignments(sid: int, year: Optional[int] = None, month: Optional[int] = None):
-    now = datetime.date.today()
+    now = _today()
     y, m = year or now.year, month or now.month
     with get_conn() as conn:
         rows = conn.execute("""
@@ -517,7 +523,7 @@ def set_reader_collection(rid: int, body: dict):
     sy = body.get("start_year")
     sm = body.get("start_month")
     if not sy or not sm:
-        now = datetime.date.today()
+        now = _today()
         sy, sm = now.year, now.month
     with get_conn() as conn:
         # 既存の開中担当を前月で終了（同じ開始月のものは除く）
@@ -579,7 +585,7 @@ def _close_open_delivery(conn, rid: int, nid: int, sy: int, sm: int):
 
 @app.get("/api/staff/{sid}/delivery-assignments")
 def get_delivery_assignments(sid: int, year: Optional[int] = None, month: Optional[int] = None):
-    now = datetime.date.today()
+    now = _today()
     y, m = year or now.year, month or now.month
     with get_conn() as conn:
         rows = conn.execute("""
