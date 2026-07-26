@@ -1034,7 +1034,7 @@ function renderReaders() {
     <tr>
       <td><b>${esc(r.name)}</b></td>
       <td>${esc(r.address)}</td>
-      <td>${renderSubTags(r.subscriptions)}</td>
+      <td style="white-space:normal;max-width:220px;">${renderSubTags(r.subscriptions)}</td>
       <td>${renderDeliveryStaff(r)}</td>
       <td>${renderCollectionStaff(r)}</td>
       <td class="text-muted">${esc(r.note)}</td>
