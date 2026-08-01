@@ -2223,18 +2223,12 @@ function _storePrefix() {
 
 // コアロジック: 値を直接受け取ってタグ文字列を返す
 function _computeTagSegFrom(devVal, manualDev, nonDevCat, price, carriers, contracts, priceUnclear = false) {
-  if (priceUnclear) {
-    const tag = '金額不明の端末値引きPOP';
-    const parts = carriers.length
-      ? _CARRIER_ORDER_P.filter(c => carriers.includes(c)).map(c => `${_CARRIER_SYM_P[c]}${tag}`)
-      : [tag];
-    return parts.join(' ');
-  }
   const device = devVal === '__non_device__' ? '' :
                  devVal === '__manual__'     ? manualDev : devVal;
   const renameTags   = candidates.rename_tags   || {};
   const deviceGroups = candidates.device_groups || {};
   const popCats      = candidates.pop_categories     || [];
+  const hasPrice     = !!price || priceUnclear;
 
   let tag = '';
   if (nonDevCat) {
@@ -2249,10 +2243,10 @@ function _computeTagSegFrom(devVal, manualDev, nonDevCat, price, carriers, contr
     } else {
       const grp = deviceGroups[device] || '未振り分け';
       if (grp === '廉価（中華）Android') {
-        tag = price
+        tag = hasPrice
           ? (contracts.includes('新規') ? '割引POP中華A' : '割引POPA')
           : 'POPA';
-      } else if (price) {
+      } else if (hasPrice) {
         if (grp === '中古iPhone')        tag = '中古端末割引POPI';
         else if (grp === '中古Android')  tag = '中古端末割引POPA';
         else if (grp.includes('iPhone')) tag = '割引POPI';
