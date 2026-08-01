@@ -27,6 +27,8 @@ def _migrate(conn):
         conn.execute("ALTER TABLE photos ADD COLUMN deposit TEXT")
     if "items_json" not in cols:
         conn.execute("ALTER TABLE photos ADD COLUMN items_json TEXT")
+    if "price_unclear" not in cols:
+        conn.execute("ALTER TABLE photos ADD COLUMN price_unclear INTEGER DEFAULT 0")
     conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_stores_code ON stores(code)")
 
 

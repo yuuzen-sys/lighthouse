@@ -421,6 +421,10 @@
         <div class="form-group">
           <label>金額（円）</label>
           <input type="text" id="f-price" placeholder="例: 87384" oninput="updateRenamePreview()">
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;margin-top:6px;font-size:12px;font-weight:normal;color:#555">
+            <input type="checkbox" id="f-price-unclear" onchange="onPriceUnclearChange()">
+            金額不明瞭・金額不要（「金額不明の端末値引きPOP」として登録）
+          </label>
         </div>
         <div class="form-group">
           <label>頭金（円）</label>
@@ -1615,6 +1619,8 @@ async function openPhotoModal(photoId) {
   setContracts(photo.contract_types || []);
   document.getElementById('f-price').value   = photo.price   || '';
   document.getElementById('f-deposit').value = photo.deposit || '';
+  document.getElementById('f-price-unclear').checked = !!photo.price_unclear;
+  onPriceUnclearChange();
   document.getElementById('f-note').value = photo.note || '';
   document.getElementById('rename-preview').textContent = photo.renamed_filename || '';
 
@@ -1669,6 +1675,8 @@ function closePhotoModal() {
   _lockReadOnly = false;
   _extraItems   = [];
   _extraDevices = [];
+  document.getElementById('f-price-unclear').checked = false;
+  onPriceUnclearChange();
   document.getElementById('photo-modal').classList.add('hidden');
   document.getElementById('lock-banner').style.display = 'none';
   loadPhotos(currentStoreId);
@@ -1781,6 +1789,7 @@ async function savePhoto() {
     deposit: document.getElementById('f-deposit').value.replace(/[,，\s]/g, '') || null,
     note: document.getElementById('f-note').value || null,
     extra_items: _getAllExtraItemsFromDom(),
+    price_unclear: document.getElementById('f-price-unclear').checked,
   };
   await apiFetch(`/api/photos/${currentPhotoId}`, {
     method: 'PUT',
@@ -2213,7 +2222,14 @@ function _storePrefix() {
 }
 
 // コアロジック: 値を直接受け取ってタグ文字列を返す
-function _computeTagSegFrom(devVal, manualDev, nonDevCat, price, carriers, contracts) {
+function _computeTagSegFrom(devVal, manualDev, nonDevCat, price, carriers, contracts, priceUnclear = false) {
+  if (priceUnclear) {
+    const tag = '金額不明の端末値引きPOP';
+    const parts = carriers.length
+      ? _CARRIER_ORDER_P.filter(c => carriers.includes(c)).map(c => `${_CARRIER_SYM_P[c]}${tag}`)
+      : [tag];
+    return parts.join(' ');
+  }
   const device = devVal === '__non_device__' ? '' :
                  devVal === '__manual__'     ? manualDev : devVal;
   const renameTags   = candidates.rename_tags   || {};
@@ -2261,8 +2277,19 @@ function _computeTagSeg() {
     document.getElementById('f-non-device-cat')?.value || '',
     (document.getElementById('f-price')?.value || '').replace(/[,，\s]/g, ''),
     getSelectedCarriers(),
-    getSelectedContracts()
+    getSelectedContracts(),
+    document.getElementById('f-price-unclear')?.checked || false
   );
+}
+
+function onPriceUnclearChange() {
+  const checked = document.getElementById('f-price-unclear').checked;
+  const priceEl   = document.getElementById('f-price');
+  const depositEl = document.getElementById('f-deposit');
+  priceEl.disabled   = checked;
+  depositEl.disabled = checked;
+  if (checked) { priceEl.value = ''; depositEl.value = ''; }
+  updateRenamePreview();
 }
 
 // 全アイテムのセグメント配列（追加アイテムはキャリア別金額のみ → リネームに影響しない）

@@ -603,6 +603,7 @@ class PhotoUpdate(BaseModel):
     contract_types: list[str] | None = None
     non_device_category: str | None = None
     extra_items: list[dict] | None = None  # [{carrier, price, deposit}] キャリア別金額
+    price_unclear: bool | None = None
 
 
 def _auto_register_device(name: str, category: str | None):
@@ -674,8 +675,13 @@ def _pop_tag(device: str, price: str,
 def _item_tag_parts(device: str, non_dev_cat: str, price: str,
                     contracts: list[str], carriers: list[str],
                     rename_tags: dict, device_groups: dict,
-                    pop_categories: list, non_pop_categories: list) -> list[str]:
+                    pop_categories: list, non_pop_categories: list,
+                    price_unclear: bool = False) -> list[str]:
     """1アイテムのタグ部品リストを返す。非POPカテゴリはキャリアなしで1要素。"""
+    if price_unclear:
+        tag = "金額不明の端末値引きPOP"
+        ordered = [c for c in CARRIER_ORDER if c in set(carriers or [])]
+        return [f"{CARRIER_SYM[c]}{tag}" for c in ordered] if ordered else [tag]
     if non_dev_cat:
         if non_dev_cat in pop_categories:
             tag = f"POP({non_dev_cat})"
@@ -694,7 +700,7 @@ def _build_renamed_new(code: str, store_name: str,
                        carriers: list[str], contracts: list[str],
                        rename_tags: dict, device_groups: dict,
                        pop_categories: list, non_pop_categories: list,
-                       suffix: str) -> str:
+                       suffix: str, price_unclear: bool = False) -> str:
     """
     分類ツリーに基づくリネーム:
       POP以外          → 【code】店舗名 カテゴリ名.ext  (キャリアタグなし)
@@ -707,7 +713,8 @@ def _build_renamed_new(code: str, store_name: str,
 
     parts = _item_tag_parts(
         device, non_dev_cat, price, contracts, carriers,
-        rename_tags, device_groups, pop_categories, non_pop_categories
+        rename_tags, device_groups, pop_categories, non_pop_categories,
+        price_unclear
     )
 
     if not parts:
@@ -734,10 +741,12 @@ def update_photo(photo_id: int, data: PhotoUpdate):
             """UPDATE photos
                SET device_name = ?, device_category = ?, price = ?, deposit = ?, note = ?,
                    carriers = ?, contract_types = ?, non_device_category = ?, items_json = ?,
+                   price_unclear = ?,
                    status = 'confirmed', updated_at = CURRENT_TIMESTAMP
                WHERE id = ?""",
             (data.device_name, data.device_category, data.price, data.deposit, data.note,
-             carriers_json, contract_types_json, data.non_device_category, items_json, photo_id)
+             carriers_json, contract_types_json, data.non_device_category, items_json,
+             1 if data.price_unclear else 0, photo_id)
         )
     return {"ok": True}
 
@@ -767,8 +776,9 @@ def confirm_photo(photo_id: int, req: ConfirmRequest = ConfirmRequest()):
     price       = photo.get("price") or ""
     carriers    = json.loads(photo.get("carriers")      or "[]")
     contracts   = json.loads(photo.get("contract_types") or "[]")
-    extra_items = json.loads(photo.get("items_json")    or "[]")
-    suffix      = Path(photo["original_filename"]).suffix or ".jpg"
+    extra_items   = json.loads(photo.get("items_json")    or "[]")
+    price_unclear = bool(photo.get("price_unclear"))
+    suffix        = Path(photo["original_filename"]).suffix or ".jpg"
 
     cands              = _load_candidates()
     rename_tags        = cands.get("rename_tags", {})
@@ -783,6 +793,7 @@ def confirm_photo(photo_id: int, req: ConfirmRequest = ConfirmRequest()):
             code, store, device, non_dev, price,
             carriers, contracts, rename_tags, device_groups,
             pop_categories, non_pop_categories, suffix,
+            price_unclear=price_unclear,
         )
 
     with get_conn() as conn:
