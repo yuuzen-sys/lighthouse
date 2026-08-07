@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lighthouse 使い方マニュアル</title>
+<style>
+:root {
+  --bg:          #EEF2F8;
+  --surface:     #FFFFFF;
+  --navy:        #0F2044;
+  --navy-mid:    #1A3560;
+  --accent:      #1B5FD4;
+  --accent-lt:   #EBF2FF;
+  --accent-dim:  #B8CEF5;
+  --border:      #CBD5E8;
+  --border-lt:   #DFE8F5;
+  --text:        #2D3E55;
+  --muted:       #637897;
+  --success-bg:  #ECFDF5;
+  --success-bd:  #A7F3D0;
+  --success-tx:  #065F46;
+  --warn-bg:     #FFFBEB;
+  --warn-bd:     #FCD34D;
+  --warn-tx:     #92400E;
+  --danger-bg:   #FEF2F2;
+  --danger-bd:   #FECACA;
+  --danger-tx:   #991B1B;
+  --tag-bg:      #EBF2FF;
+  --tag-tx:      #1B5FD4;
+  --step-bg:     #0F2044;
+  --step-tx:     #FFFFFF;
+  --kbd-bg:      #F0F4FA;
+  --kbd-bd:      #B0BFD8;
+  --nav-w:       240px;
+  --font: -apple-system, "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Yu Gothic", "Meiryo", sans-serif;
+  --mono: Consolas, "Courier New", monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg:#0D1929;--surface:#152035;--navy:#A8C4F0;--navy-mid:#C3D7F7;
+    --accent:#5B93E8;--accent-lt:#0E1F3A;--accent-dim:#1E3A68;
+    --border:#253A58;--border-lt:#1D3050;--text:#C8D8EE;--muted:#7A95B8;
+    --success-bg:#042A1B;--success-bd:#065F46;--success-tx:#6EE7B7;
+    --warn-bg:#1C1500;--warn-bd:#92400E;--warn-tx:#FCD34D;
+    --danger-bg:#1C0A0A;--danger-bd:#991B1B;--danger-tx:#FECACA;
+    --tag-bg:#0E1F3A;--tag-tx:#7DB5F5;--step-bg:#A8C4F0;--step-tx:#0D1929;
+    --kbd-bg:#1A2E48;--kbd-bd:#2E4668;
+  }
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+body { font-family: var(--font); font-size: 14px; line-height: 1.8; color: var(--text); background: var(--bg); }
+
+/* ── Layout ── */
+.layout { display: flex; max-width: 1160px; margin: 0 auto; padding: 0 16px; gap: 32px; align-items: flex-start; }
+.sidebar { width: var(--nav-w); flex-shrink: 0; position: sticky; top: 24px; max-height: calc(100vh - 48px); overflow-y: auto; padding: 20px 0; }
+.content { flex: 1; min-width: 0; padding: 32px 0 80px; }
+
+/* ── Header ── */
+.site-header { background: var(--navy-mid); color: #fff; padding: 14px 0; }
+.site-header .inner { max-width: 1160px; margin: 0 auto; padding: 0 24px; display: flex; align-items: center; gap: 12px; }
+.site-header .logo { font-size: 18px; font-weight: 700; letter-spacing: .04em; color: #fff; }
+.site-header .badge { background: rgba(255,255,255,.15); border: 1px solid rgba(255,255,255,.25); color: #fff; font-size: 11px; padding: 2px 8px; border-radius: 20px; letter-spacing: .06em; }
+.site-header .back { margin-left: auto; font-size: 12px; color: rgba(255,255,255,.75); text-decoration: none; padding: 4px 12px; border: 1px solid rgba(255,255,255,.3); border-radius: 5px; transition: background .15s; }
+.site-header .back:hover { background: rgba(255,255,255,.1); }
+
+/* ── Nav ── */
+.nav-title { font-size: 10px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); padding: 0 12px 8px; border-bottom: 1px solid var(--border-lt); margin-bottom: 8px; }
+.nav-list { list-style: none; }
+.nav-list a { display: block; padding: 5px 12px; font-size: 12.5px; color: var(--muted); text-decoration: none; border-radius: 5px; transition: color .15s, background .15s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nav-list a:hover { color: var(--accent); background: var(--accent-lt); }
+.nav-list a.active { color: var(--accent); background: var(--accent-lt); font-weight: 600; }
+.nav-list .sub a { padding-left: 22px; font-size: 12px; }
+.nav-list .group-label { font-size: 11px; font-weight: 700; letter-spacing: .08em; color: var(--navy); padding: 10px 12px 3px; opacity: .7; }
+
+/* ── Sections ── */
+.section { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 28px 32px; margin-bottom: 24px; }
+h2.sec-title { font-size: 18px; font-weight: 700; color: var(--navy); margin-bottom: 4px; text-wrap: balance; display: flex; align-items: center; gap: 10px; }
+h2.sec-title .sec-num { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; background: var(--step-bg); color: var(--step-tx); border-radius: 6px; font-size: 13px; font-weight: 700; flex-shrink: 0; }
+.sec-lead { font-size: 13px; color: var(--muted); margin-bottom: 18px; padding-bottom: 14px; border-bottom: 1px solid var(--border-lt); }
+h3.sub-title { font-size: 14px; font-weight: 700; color: var(--navy); margin: 20px 0 8px; }
+h3.sub-title:first-child { margin-top: 0; }
+
+/* ── Steps ── */
+.steps { display: flex; flex-direction: column; gap: 10px; }
+.step { display: flex; gap: 12px; align-items: flex-start; }
+.step-num { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; background: var(--accent); color: #fff; border-radius: 50%; font-size: 11px; font-weight: 700; flex-shrink: 0; margin-top: 2px; }
+.step-body { flex: 1; }
+.step-body strong { color: var(--navy); }
+
+/* ── Callouts ── */
+.note, .warn, .danger { border-radius: 6px; padding: 10px 14px; font-size: 13px; margin: 14px 0; display: flex; gap: 8px; align-items: flex-start; }
+.note { background: var(--success-bg); border: 1px solid var(--success-bd); color: var(--success-tx); }
+.warn { background: var(--warn-bg); border: 1px solid var(--warn-bd); color: var(--warn-tx); }
+.danger { background: var(--danger-bg); border: 1px solid var(--danger-bd); color: var(--danger-tx); }
+.note-icon, .warn-icon, .danger-icon { font-size: 14px; flex-shrink: 0; margin-top: 1px; }
+
+/* ── Misc ── */
+.chip { display: inline-block; background: var(--tag-bg); color: var(--tag-tx); border-radius: 4px; font-size: 11.5px; font-weight: 600; padding: 1px 7px; font-family: var(--mono); letter-spacing: .02em; }
+kbd { display: inline-block; background: var(--kbd-bg); border: 1px solid var(--kbd-bd); border-bottom-width: 2px; border-radius: 4px; font-family: var(--mono); font-size: 11px; padding: 1px 6px; color: var(--text); }
+.fname { display: inline-block; font-family: var(--mono); font-size: 12px; background: var(--accent-lt); border: 1px solid var(--accent-dim); border-radius: 4px; padding: 3px 10px; color: var(--accent); margin: 3px 0; word-break: break-all; }
+
+/* ── Table ── */
+.tbl-wrap { overflow-x: auto; margin: 12px 0; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th { background: var(--accent-lt); color: var(--navy); font-weight: 700; text-align: left; padding: 8px 12px; border: 1px solid var(--border); }
+td { padding: 7px 12px; border: 1px solid var(--border-lt); vertical-align: top; }
+tr:nth-child(even) td { background: var(--bg); }
+
+/* ── Grid ── */
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 12px 0; }
+.card { background: var(--accent-lt); border: 1px solid var(--accent-dim); border-radius: 7px; padding: 12px 14px; }
+.card-title { font-weight: 700; color: var(--navy); font-size: 13px; margin-bottom: 4px; }
+.card p { font-size: 12.5px; color: var(--muted); margin: 0; }
+
+/* ── Status badges ── */
+.status { display: inline-block; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 10px; letter-spacing: .04em; }
+.status-pending   { background: #FEF3C7; color: #92400E; }
+.status-done      { background: #D1FAE5; color: #065F46; }
+.status-skip      { background: #F3F4F6; color: #6B7280; }
+.status-confirmed { background: #DBEAFE; color: #1E40AF; }
+
+hr { border: none; border-top: 1px solid var(--border-lt); margin: 18px 0; }
+
+/* ── Responsive ── */
+@media (max-width: 720px) {
+  .layout { flex-direction: column; }
+  .sidebar { width: 100%; position: static; max-height: none; border-bottom: 1px solid var(--border); padding-bottom: 12px; }
+  .section { padding: 20px 16px; }
+  .grid2 { grid-template-columns: 1fr; }
+}
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+</style>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="inner">
+    <span class="logo">🏮 Lighthouse</span>
+    <span class="badge">MANUAL</span>
+    <a href="/" class="back">← アプリに戻る</a>
+  </div>
+</header>
+
+<div class="layout">
+  <nav class="sidebar" aria-label="目次">
+    <div class="nav-title">目次</div>
+    <ul class="nav-list">
+      <li><a href="#s1">1. システム概要</a></li>
+      <li><a href="#s2">2. ログイン</a></li>
+      <li class="group-label">店舗・写真管理</li>
+      <li><a href="#s3">3. 店舗の管理</a></li>
+      <li><a href="#s4">4. 写真のアップロード</a></li>
+      <li><a href="#s5">5. 写真一覧と絞り込み</a></li>
+      <li class="group-label">写真の編集</li>
+      <li><a href="#s6">6. 写真モーダルの基本</a></li>
+      <li class="sub"><ul>
+        <li><a href="#s6-ocr">6.1 OCR解析</a></li>
+        <li><a href="#s6-device">6.2 機種・キャリア</a></li>
+        <li><a href="#s6-price">6.3 金額・頭金</a></li>
+        <li><a href="#s6-cat">6.4 POP以外カテゴリ</a></li>
+        <li><a href="#s6-ryouhan">6.5 量販店POP</a></li>
+      </ul></li>
+      <li class="group-label">リネームと確定</li>
+      <li><a href="#s7">7. リネームの仕組み</a></li>
+      <li><a href="#s8">8. 確定・リネーム</a></li>
+      <li><a href="#s9">9. 切り分けモード</a></li>
+      <li class="group-label">一括操作・出力</li>
+      <li><a href="#s10">10. 選択モード（一括）</a></li>
+      <li><a href="#s11">11. データの出力</a></li>
+      <li class="group-label">設定</li>
+      <li><a href="#s12">12. 設定画面</a></li>
+      <li><a href="#s13">13. トラブル対応</a></li>
+    </ul>
+  </nav>
+
+  <main class="content">
+
+    <section class="section" id="s1">
+      <h2 class="sec-title"><span class="sec-num">1</span>システム概要</h2>
+      <p class="sec-lead">Lighthouseとは何か、どのような場面で使うか</p>
+      <p>Lighthouse は、キャリアショップ・量販店の店頭 POP 写真を管理するための業務システムです。写真をアップロードすると AI（Claude Vision）が自動で端末名・価格を読み取り、所定のルールに従ってファイルをリネームします。</p>
+      <div class="grid2" style="margin-top:16px">
+        <div class="card"><div class="card-title">📷 写真管理</div><p>店舗ごとに POP 写真を整理し、リネーム済みファイルを一括ダウンロード</p></div>
+        <div class="card"><div class="card-title">🔍 OCR 解析</div><p>AI が端末名・価格・キャリアを自動推定。確認・修正して確定</p></div>
+        <div class="card"><div class="card-title">✏️ リネーム</div><p>「割引POPI」「POPA」など端末グループ×価格の有無でタグを自動決定</p></div>
+        <div class="card"><div class="card-title">📊 Excel 出力</div><p>機種・価格・頭金・ステータスを一覧で出力。報告書作成に活用</p></div>
+      </div>
+      <div class="note" style="margin-top:16px">
+        <span class="note-icon">ℹ️</span>
+        <span>写真ファイルはサーバーの永続ディスクに保存されます。ブラウザのストレージとは関係ありません。</span>
+      </div>
+    </section>
+
+    <section class="section" id="s2">
+      <h2 class="sec-title"><span class="sec-num">2</span>ログイン</h2>
+      <p class="sec-lead">アカウントでサインインしてシステムを開始する</p>
+      <div class="steps">
+        <div class="step"><span class="step-num">1</span><div class="step-body">ブラウザでシステムの URL にアクセスします。ログインフォームが表示されます。</div></div>
+        <div class="step"><span class="step-num">2</span><div class="step-body"><strong>ユーザー名</strong>と<strong>パスワード</strong>を入力し「ログイン」をクリックします。</div></div>
+        <div class="step"><span class="step-num">3</span><div class="step-body">ログイン成功後、ホーム画面（写真一覧）に遷移します。認証情報はブラウザに保存されるため、次回以降は自動でログイン状態が維持されます。</div></div>
+      </div>
+      <div class="note">
+        <span class="note-icon">ℹ️</span>
+        <span>アカウントの追加・削除は管理者が<strong>設定 → ユーザー管理</strong>タブから行います。初期セットアップ時には「初期設定」モードで管理者アカウントを作成します。</span>
+      </div>
+    </section>
+
+    <section class="section" id="s3">
+      <h2 class="sec-title"><span class="sec-num">3</span>店舗の管理</h2>
+      <p class="sec-lead">写真を紐付ける店舗を登録・選択する</p>
+      <h3 class="sub-title">店舗の選択</h3>
+      <p>画面左のサイドバーに店舗一覧が表示されます。クリックすると対象店舗の写真一覧に切り替わります。店舗コードの頭文字（DS / au / SB）に応じてキャリアカラーのラベルが表示されます。</p>
+      <h3 class="sub-title">店舗のインポート</h3>
+      <p>「設定 → 店舗インポート」タブから一括登録できます。</p>
+      <div class="steps">
+        <div class="step"><span class="step-num">1</span><div class="step-body">テキストエリアに店舗情報を貼り付けます。</div></div>
+        <div class="step"><span class="step-num">2</span><div class="step-body">対応フォーマット（どちらか一方、混在可）:<br><span class="fname">【DS01】&Tab;ドコモショップ〇〇店</span><br><span class="fname">DS01,ドコモショップ〇〇店</span></div></div>
+        <div class="step"><span class="step-num">3</span><div class="step-body">「インポート実行」をクリックします。</div></div>
+      </div>
+      <div class="note">
+        <span class="note-icon">✅</span>
+        <span><strong>追記・更新方式（UPSERT）</strong>：同じ店舗コードがすでに存在する場合は店舗名を更新し、新しいコードは追加します。インポートしなかった既存店舗は削除されません。写真との紐付けも保たれます。</span>
+      </div>
+    </section>
+
+    <section class="section" id="s4">
+      <h2 class="sec-title"><span class="sec-num">4</span>写真のアップロード</h2>
+      <p class="sec-lead">POP 写真をシステムに取り込む</p>
+      <div class="steps">
+        <div class="step"><span class="step-num">1</span><div class="step-body">左サイドバーから対象の店舗を選択します（先に店舗を選ばないとアップロードできません）。</div></div>
+        <div class="step"><span class="step-num">2</span><div class="step-body">写真エリアに画像ファイルをドラッグ＆ドロップするか、エリアをクリックしてファイルを選択します。JPEG・PNG に対応しています。</div></div>
+        <div class="step"><span class="step-num">3</span><div class="step-body">進捗バーが表示されます。複数枚でも一括でアップロード可能です。</div></div>
+      </div>
+      <div class="note">
+        <span class="note-icon">ℹ️</span>
+        <span>アップロード直後の写真はステータス <span class="status status-pending">未処理</span> となり、OCR 解析待ちの状態になります。</span>
+      </div>
+    </section>
+
+    <section class="section" id="s5">
+      <h2 class="sec-title"><span class="sec-num">5</span>写真一覧と絞り込み</h2>
+      <p class="sec-lead">アップロードした写真を確認・フィルタリングする</p>
+      <h3 class="sub-title">写真カードのステータス</h3>
+      <div class="tbl-wrap">
+        <table>
+          <tr><th>ステータス</th><th>意味</th></tr>
+          <tr><td><span class="status status-pending">未処理</span></td><td>まだ内容が編集・確定されていない写真</td></tr>
+          <tr><td><span class="status status-confirmed">処理済</span></td><td>内容を編集して「保存」した写真（確定はまだ）</td></tr>
+          <tr><td><span class="status status-done">確定済</span></td><td>「確定・リネーム」が完了し、ファイル名が決まった写真</td></tr>
+          <tr><td><span class="status status-skip">対象外</span></td><td>機種 POP ではないとして除外した写真</td></tr>
+        </table>
+      </div>
+      <h3 class="sub-title">絞り込み</h3>
+      <p>ツールバーの「絞り込み」ボタンで絞り込みパネルを開きます。ステータス・機種名・キャリア・カテゴリなど複数条件を組み合わせて絞り込めます。絞り込みが有効な間はパネルを閉じても条件が保持されます。</p>
+      <div class="note">
+        <span class="note-icon">ℹ️</span>
+        <span>「量販店POP」で登録した<strong>追加機種</strong>も機種絞り込みの対象に含まれます。</span>
+      </div>
+    </section>
+
+    <section class="section" id="s6">
+      <h2 class="sec-title"><span class="sec-num">6</span>写真モーダルの基本</h2>
+      <p class="sec-lead">写真をクリックして開くモーダルで内容を編集する</p>
+      <p>写真カードをクリックするとモーダルが開きます。左側に写真のプレビュー、右側に編集フォームが表示されます。モーダルを開くと<strong>自分専用にロック</strong>され、他のユーザーが同時編集できない状態になります。</p>
+
+      <hr>
+      <h3 class="sub-title" id="s6-ocr">6.1 OCR 解析</h3>
+      <p>「🔍 解析」ボタンをクリックすると AI が写真テキストを解析し、端末名・価格の候補をフォームに自動入力します。</p>
+      <ul style="margin-left:18px;margin-top:6px;font-size:13px;line-height:2">
+        <li>候補が複数ある場合はチップ形式で表示されます。クリックすると入力欄に反映されます。</li>
+        <li>解析はバックグラウンドで実行されるため、完了後にグリッドが自動更新されます。</li>
+        <li>解析精度は写真の鮮明さに依存します。読み取れない場合は手入力してください。</li>
+      </ul>
+
+      <hr>
+      <h3 class="sub-title" id="s6-device">6.2 機種・キャリアの設定</h3>
+      <div class="tbl-wrap">
+        <table>
+          <tr><th>項目</th><th>説明</th></tr>
+          <tr><td><strong>機種</strong></td><td>セレクトから選択するか「✏ 手入力...」を選んで入力します。<br>「端末以外」を選ぶとカテゴリ選択モードになります（<a href="#s6-cat">6.4</a>参照）。<br>手入力した機種は候補リストに自動登録されます。</td></tr>
+          <tr><td><strong>キャリア</strong></td><td>ドコモ・au・SB・UQ・Y!・楽天から複数選択できます。<br>店舗コードの頭文字に応じて<em>暗黙キャリア</em>が自動設定されます（DS→ドコモ、au→au、SB→SB）。</td></tr>
+          <tr><td><strong>契約種別</strong></td><td>「新規」を選択すると「新規契約あり」がファイル名に追加されます。廉価（中華）Android の場合は「割引POP中華A」タグになります。</td></tr>
+        </table>
+      </div>
+
+      <hr>
+      <h3 class="sub-title" id="s6-price">6.3 金額・頭金の設定</h3>
+      <div class="tbl-wrap">
+        <table>
+          <tr><th>項目</th><th>説明</th></tr>
+          <tr><td><strong>金額（円）</strong></td><td>割引額または販売価格を入力します。数字のみ（カンマ可）。入力があると「割引POP」系タグが選ばれます。</td></tr>
+          <tr><td><strong>頭金（円）</strong></td><td>頭金がある場合に入力します。Excel 出力の「金額(頭金金額)」列に反映されます。頭金なしの場合は空欄にすると「(0)」と出力されます。</td></tr>
+          <tr><td><strong>金額不明瞭・金額不要</strong></td><td>金額の記載が不明瞭または不要な場合にチェックします。<br>チェックすると金額・頭金欄が無効化されますが、タグは金額ありと同じ（<span class="chip">割引POPI</span>/<span class="chip">割引POPA</span>等）になります。<br>「金額は分からないが、確実に値引き POP である」ことを記録するために使用します。</td></tr>
+        </table>
+      </div>
+
+      <hr>
+      <h3 class="sub-title" id="s6-cat">6.4 POP 以外カテゴリ</h3>
+      <p>機種セレクトで「端末以外」を選ぶと POP カテゴリ選択欄が表示されます。端末 POP 以外の写真（料金プランのぼり・店舗装飾等）を管理するための区分です。</p>
+      <div class="tbl-wrap">
+        <table>
+          <tr><th>カテゴリ種別</th><th>ファイル名への影響</th></tr>
+          <tr><td>POP 系カテゴリ（例: 「その他」）</td><td><span class="fname">【DS01】〇〇店 auPOP(その他).jpg</span></td></tr>
+          <tr><td>POP 以外カテゴリ（例: 「料金プランのぼり」）</td><td><span class="fname">【DS01】〇〇店 料金プランのぼり.jpg</span>（キャリアタグなし）</td></tr>
+        </table>
+      </div>
+      <p style="margin-top:8px;font-size:13px">カテゴリは「設定 → 機種候補」タブで POP 系／POP 以外に分類して管理できます。</p>
+
+      <hr>
+      <h3 class="sub-title" id="s6-ryouhan">6.5 量販店 POP（複数キャリア別金額・追加機種）</h3>
+      <p>量販店では複数キャリアが1枚の POP に掲載されることがあります。</p>
+      <div style="margin-top:12px">
+        <div style="font-weight:700;font-size:13px;color:var(--navy);margin-bottom:6px">① キャリア別金額の追加</div>
+        <p style="font-size:13px">「＋ キャリア別金額を追加」ボタンで行を追加できます。各行にキャリア・金額・頭金を入力します。</p>
+        <ul style="margin-left:18px;font-size:13px;line-height:2">
+          <li>ファイル名は<strong>メインの金額設定のみ</strong>に基づきます（追加行はリネームに影響しません）。</li>
+          <li>Excel 出力の金額列にはメイン金額のみ反映されます。追加行はデータとして保存されます。</li>
+        </ul>
+      </div>
+      <div style="margin-top:14px">
+        <div style="font-weight:700;font-size:13px;color:var(--navy);margin-bottom:6px">② 追加機種の登録（同一 POP 複数機種）</div>
+        <p style="font-size:13px">同一キャリアの異なる機種が1枚に掲載されている場合、「＋ 追加機種を登録」ボタンで追加できます。</p>
+        <ul style="margin-left:18px;font-size:13px;line-height:2">
+          <li>追加機種は<strong>検索・絞り込みにのみ</strong>使用されます。ファイル名には影響しません。</li>
+          <li>ファイル名はメインの機種設定のみで決まります。</li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="section" id="s7">
+      <h2 class="sec-title"><span class="sec-num">7</span>リネームの仕組み</h2>
+      <p class="sec-lead">ファイル名が自動生成されるルールを理解する</p>
+      <h3 class="sub-title">基本フォーマット</h3>
+      <div class="fname" style="margin:8px 0 12px">【店舗コード】店舗名 {キャリア記号}{タグ} {新規契約あり}.拡張子</div>
+      <h3 class="sub-title">タグの自動決定ルール</h3>
+      <div class="tbl-wrap">
+        <table>
+          <tr><th>端末グループ</th><th>金額あり（または金額不明瞭✓）</th><th>金額なし</th></tr>
+          <tr><td>iPhone 系</td><td><span class="chip">割引POPI</span></td><td><span class="chip">POPI</span></td></tr>
+          <tr><td>Android 系（一般）</td><td><span class="chip">割引POPA</span></td><td><span class="chip">POPA</span></td></tr>
+          <tr><td>廉価（中華）Android</td><td><span class="chip">割引POPA</span>（新規: <span class="chip">割引POP中華A</span>）</td><td><span class="chip">POPA</span></td></tr>
+          <tr><td>中古 iPhone</td><td><span class="chip">中古端末割引POPI</span></td><td><span class="chip">POPI</span></td></tr>
+          <tr><td>中古 Android</td><td><span class="chip">中古端末割引POPA</span></td><td><span class="chip">POPA</span></td></tr>
+        </table>
+      </div>
+      <h3 class="sub-title" style="margin-top:18px">キャリア記号</h3>
+      <div class="tbl-wrap">
+        <table>
+          <tr><th>キャリア</th><th>記号</th><th>例</th></tr>
+          <tr><td>ドコモ</td><td><span class="chip">d</span></td><td><span class="fname">d割引POPI</span></td></tr>
+          <tr><td>au</td><td><span class="chip">au</span></td><td><span class="fname">au割引POPI</span></td></tr>
+          <tr><td>SoftBank</td><td><span class="chip">SB</span></td><td><span class="fname">SB割引POPI</span></td></tr>
+          <tr><td>UQ / Y! / 楽天</td><td><span class="chip">UQ</span> / <span class="chip">Y!</span> / <span class="chip">楽天</span></td><td></td></tr>
+        </table>
+      </div>
+      <h3 class="sub-title" style="margin-top:18px">リネームタグ（1対1対応）</h3>
+      <p style="font-size:13px">特定の機種名に対してカスタムタグを設定できます。「設定 → 機種候補 → リネームタグ」で管理します。登録されている場合、自動決定ルールよりもこちらが優先されます。</p>
+      <div class="fname">例: Galaxy A25 → 割引POPA(Galaxy A25)</div>
+      <h3 class="sub-title" style="margin-top:18px">＋追加ボタンでセグメントを手動追加</h3>
+      <p style="font-size:13px">「＋ 追加」ボタンをクリックすると、現在のリネームプレビューの内容がタグとして固定されます。複合的なファイル名を組み立てる際に使用します。</p>
+    </section>
+
+    <section class="section" id="s8">
+      <h2 class="sec-title"><span class="sec-num">8</span>確定・リネーム</h2>
+      <p class="sec-lead">編集内容を確定してファイル名を決定する</p>
+      <div class="steps">
+        <div class="step"><span class="step-num">1</span><div class="step-body">機種・キャリア・金額などを編集し、リネームプレビューを確認します。</div></div>
+        <div class="step"><span class="step-num">2</span><div class="step-body">「<strong>✓ 確定・リネーム</strong>」ボタンをクリックします。自動でデータが保存されてからリネームが実行されます。</div></div>
+        <div class="step"><span class="step-num">3</span><div class="step-body">トーストで確定後のファイル名が通知されます。写真はステータス <span class="status status-done">確定済</span> に切り替わります。</div></div>
+      </div>
+      <div class="warn">
+        <span class="warn-icon">⚠️</span>
+        <span>切り分けモード（<a href="#s9">9章</a>参照）が有効な間は「確定・リネーム」ボタンが無効になります。誤操作防止のための仕様です。切り分けを完了またはキャンセルしてから確定してください。</span>
+      </div>
+      <hr>
+      <h3 class="sub-title">対象外（除外）</h3>
+      <p>機種 POP ではない写真には「対象外」ボタンを使います。ステータスが <span class="status status-skip">対象外</span> になり、Excel 出力や ZIP ダウンロードの対象から外れます。取り消しは「↩ 未処理に戻す」で行います。</p>
+      <hr>
+      <h3 class="sub-title">削除</h3>
+      <p>「🗑 削除」ボタンでその写真をシステムから完全削除します。<strong>この操作は取り消せません</strong>。確定済み写真を削除しないよう注意してください。</p>
+    </section>
+
+    <section class="section" id="s9">
+      <h2 class="sec-title"><span class="sec-num">9</span>切り分けモード（クロップ）</h2>
+      <p class="sec-lead">1枚の写真から複数の POP を切り出す</p>
+      <p>1回の撮影で複数の POP が写っている場合、切り分けで個別の写真として分割できます。</p>
+      <div class="steps">
+        <div class="step"><span class="step-num">1</span><div class="step-body">モーダル左下の「<strong>✂ 切り分け</strong>」ボタンをクリックします。フォームが非表示になり、切り分けモードに入ります。</div></div>
+        <div class="step"><span class="step-num">2</span><div class="step-body"><strong>4点変換モード（推奨）</strong>: 写真上の POP の四隅をクリックして台形補正します。斜めに撮影した場合でも正面から見た状態に補正されます。<br><strong>矩形モード</strong>: ドラッグで長方形範囲を指定します。</div></div>
+        <div class="step"><span class="step-num">3</span><div class="step-body">「✂ 切り分け実行」ボタンをクリックします。指定した範囲が新しい写真として保存されます。</div></div>
+        <div class="step"><span class="step-num">4</span><div class="step-body">「キャンセル」で切り分けモードを終了します。元の写真は削除されません。</div></div>
+      </div>
+      <div class="note">
+        <span class="note-icon">ℹ️</span>
+        <span>切り分け後に生成された写真は子写真として管理され、写真一覧にも表示されます。元の写真と子写真はそれぞれ個別に編集・確定できます。</span>
+      </div>
+    </section>
+
+    <section class="section" id="s10">
+      <h2 class="sec-title"><span class="sec-num">10</span>選択モード（一括操作）</h2>
+      <p class="sec-lead">複数の写真をまとめて処理する</p>
+      <p>ツールバーの「解析対象を選択」ボタンをクリックすると選択モードに入ります。写真カードをクリックで選択（チェックマーク表示）できます。</p>
+      <div class="grid2" style="margin-top:12px">
+        <div class="card"><div class="card-title">▶ 一括解析</div><p>選択した写真をまとめて OCR 解析キューに追加します。解析はバックグラウンドで順次処理されます。</p></div>
+        <div class="card"><div class="card-title">🗑 不使用リネーム</div><p>選択した写真を「<span class="fname">【店舗コード】店舗名 不使用.jpg</span>」という名前で一括確定します。撮影したが使用しない写真の整理に使います。</p></div>
+      </div>
+      <div class="steps" style="margin-top:14px">
+        <div class="step"><span class="step-num">1</span><div class="step-body">「解析対象を選択」または「未処理全選択」で対象写真を選びます。</div></div>
+        <div class="step"><span class="step-num">2</span><div class="step-body">「▶ 一括解析」または「🗑 不使用リネーム」をクリックします。</div></div>
+        <div class="step"><span class="step-num">3</span><div class="step-body">処理完了後、自動的に選択モードが解除されます。</div></div>
+      </div>
+      <div class="note">
+        <span class="note-icon">ℹ️</span>
+        <span>不使用リネームは<strong>現在選択中の店舗</strong>の店舗コード・店舗名を使ってリネームします。操作前に正しい店舗が選択されていることを確認してください。</span>
+      </div>
+    </section>
+
+    <section class="section" id="s11">
+      <h2 class="sec-title"><span class="sec-num">11</span>データの出力</h2>
+      <p class="sec-lead">写真ファイルと解析データをエクスポートする</p>
+      <h3 class="sub-title">📊 Excel 出力</h3>
+      <p>「⬇ Excel 出力」ボタンで、確定済み写真の情報を xlsx 形式でダウンロードします。</p>
+      <div class="tbl-wrap">
+        <table>
+          <tr><th>列名</th><th>内容</th></tr>
+          <tr><td>店舗コード / 店舗名</td><td>紐付いている店舗の情報</td></tr>
+          <tr><td>機種名</td><td>編集画面で設定した機種名</td></tr>
+          <tr><td>キャリア</td><td>選択したキャリア（複数は「/」区切り）</td></tr>
+          <tr><td>金額</td><td>金額欄の値</td></tr>
+          <tr><td>金額(頭金金額)</td><td>例: <span class="chip">22000(0)</span>（頭金が空欄の場合は0）</td></tr>
+          <tr><td>備考</td><td>備考欄の値</td></tr>
+          <tr><td>リネーム後ファイル名</td><td>確定後のファイル名</td></tr>
+          <tr><td>ステータス</td><td>done / skipped 等</td></tr>
+        </table>
+      </div>
+      <h3 class="sub-title" style="margin-top:18px">📂 写真保存（ZIP）</h3>
+      <p>「📂 写真保存」ボタンで確定済み写真を ZIP 形式でダウンロードします。ファイル名はリネーム後の名前になっています。</p>
+      <div class="note">
+        <span class="note-icon">ℹ️</span>
+        <span>特定店舗のみダウンロードしたい場合は左サイドバーで店舗を選択した状態で操作してください（店舗フィルターが適用されます）。</span>
+      </div>
+    </section>
+
+    <section class="section" id="s12">
+      <h2 class="sec-title"><span class="sec-num">12</span>設定画面</h2>
+      <p class="sec-lead">システムの各種設定を管理する</p>
+      <h3 class="sub-title">店舗インポート</h3>
+      <p>詳細は <a href="#s3">3章</a>を参照してください。</p>
+      <h3 class="sub-title">機種候補</h3>
+      <p>OCR 解析や機種セレクトで使用する機種候補を管理します。</p>
+      <ul style="margin-left:18px;font-size:13px;line-height:2">
+        <li>機種名を手入力して「追加」すると候補リストに追加されます。</li>
+        <li>「POP カテゴリ」「POP 以外カテゴリ」もここで管理します（端末以外モードで使用）。</li>
+        <li>「リネームタグ（1:1対応）」: 特定の機種名に対してカスタムリネームタグを設定できます。</li>
+      </ul>
+      <h3 class="sub-title" style="margin-top:14px">端末グループ</h3>
+      <p>機種をグループ（iPhone 系・Android 系・廉価（中華）Android 等）に分類します。ドラッグ＆ドロップで移動できます。グループの分類がリネームタグの自動決定に使われます。</p>
+      <h3 class="sub-title" style="margin-top:14px">データ管理</h3>
+      <p>全データの削除（管理者向け）と<strong>孤立写真の回収</strong>が行えます。孤立写真の回収は次章で説明します。</p>
+      <h3 class="sub-title" style="margin-top:14px">ユーザー管理</h3>
+      <p>アカウントの追加・削除を管理者が行います。ログイン中のユーザーは削除できません。</p>
+    </section>
+
+    <section class="section" id="s13">
+      <h2 class="sec-title"><span class="sec-num">13</span>トラブル対応</h2>
+      <p class="sec-lead">よくある問題と解決方法</p>
+
+      <h3 class="sub-title">孤立写真が発生した</h3>
+      <p>何らかの原因で写真が「どの店舗にも属していない」状態（孤立）になることがあります。</p>
+      <div class="steps">
+        <div class="step"><span class="step-num">1</span><div class="step-body">設定 → <strong>データ管理タブ</strong>を開きます。</div></div>
+        <div class="step"><span class="step-num">2</span><div class="step-body">「孤立写真を確認する」をクリックします。孤立写真がグループ別（旧店舗 ID ごと）に表示されます。</div></div>
+        <div class="step"><span class="step-num">3</span><div class="step-body">ファイル名のヒント（<span class="chip">【コード】</span>が含まれていれば自動で候補をプリセット）を参考に、各グループの割り当て先店舗をドロップダウンで選択します。</div></div>
+        <div class="step"><span class="step-num">4</span><div class="step-body">「再割り当て実行」をクリックします。完了後、写真一覧に正しく表示されるようになります。</div></div>
+      </div>
+      <div class="warn">
+        <span class="warn-icon">⚠️</span>
+        <span>元の店舗が削除されている場合は、先に「設定 → 店舗インポート」で店舗を再登録してから回収操作を行ってください。</span>
+      </div>
+
+      <hr>
+      <h3 class="sub-title">解析が完了しない・結果が空</h3>
+      <ul style="margin-left:18px;font-size:13px;line-height:2">
+        <li>写真が鮮明でない・テキストが小さすぎる場合、AI が読み取れないことがあります。</li>
+        <li>ネットワークエラーの場合は「🔍 解析」ボタンを再クリックしてください。</li>
+        <li>解析できなかった場合は、候補が「なし」と表示されます。手入力で対応してください。</li>
+      </ul>
+
+      <hr>
+      <h3 class="sub-title">別のユーザーが編集中で開けない</h3>
+      <p>写真にはユーザー間の排他ロックがかかっています。別のユーザーが同じ写真を開いている間は読み取り専用になります。相手がモーダルを閉じると自動解除されます（ロックの有効期間は一定時間で自動失効します）。</p>
+
+      <hr>
+      <h3 class="sub-title">ファイル名の括弧が全角になっている</h3>
+      <p>リネーム処理時に全角括弧（<kbd>（）</kbd>）は自動的に半角（<kbd>()</kbd>）に変換されます。入力時に全角で入力してもファイル名では半角になります。</p>
+    </section>
+
+  </main>
+</div>
+
+<script>
+const sections = document.querySelectorAll('section[id]');
+const navLinks  = document.querySelectorAll('.nav-list a[href^="#"]');
+const observer  = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      navLinks.forEach(a => a.classList.remove('active'));
+      const link = document.querySelector(`.nav-list a[href="#${e.target.id}"]`);
+      if (link) link.classList.add('active');
+    }
+  });
+}, { rootMargin: '-20% 0px -70% 0px' });
+sections.forEach(s => observer.observe(s));
+</script>
+</body>
+</html>
