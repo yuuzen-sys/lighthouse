@@ -16,7 +16,7 @@ nav.tabs button { padding: 10px 20px; border: none; background: none; cursor: po
 nav.tabs button:hover { color: #1a3a5c; }
 nav.tabs button.active { color: #1a3a5c; font-weight: bold; border-bottom-color: #1a3a5c; }
 
-main { padding: 20px; max-width: 1100px; margin: 0 auto; }
+main { padding: 20px; max-width: 1400px; margin: 0 auto; }
 .tab-panel { display: none; }
 .tab-panel.active { display: block; }
 
@@ -115,7 +115,11 @@ td { padding: 9px 12px; border-bottom: 1px solid #eee; vertical-align: middle; f
   <div class="card">
     <div class="card-title">
       読者一覧
-      <button class="btn btn-primary btn-sm" onclick="openReaderModal()">＋ 新規登録</button>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;">
+        <button class="btn btn-secondary btn-sm" onclick="openBulkAssignModal('delivery')">一括 配達担当設定</button>
+        <button class="btn btn-secondary btn-sm" onclick="openBulkAssignModal('collection')">一括 集金担当設定</button>
+        <button class="btn btn-primary btn-sm" onclick="openReaderModal()">＋ 新規登録</button>
+      </div>
     </div>
     <div class="flex-row" style="margin-bottom:10px;">
       <input id="reader-search" type="text" placeholder="名前・住所で検索…" style="padding:5px 8px;border:1px solid #ccc;border-radius:4px;width:200px;font-size:13px;" oninput="renderReaders()">
@@ -544,6 +548,39 @@ td { padding: 9px 12px; border-bottom: 1px solid #eee; vertical-align: middle; f
     <div class="modal-footer">
       <button class="btn btn-secondary" onclick="closeModal('modal-assignments')">キャンセル</button>
       <button class="btn btn-primary" onclick="saveAssignments()">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════ Modal: 一括担当設定 ════ -->
+<div id="modal-bulk-assign" class="modal-overlay">
+  <div class="modal" style="width:700px;">
+    <h2 id="bulk-assign-title">一括担当設定</h2>
+    <input type="hidden" id="bulk-assign-type">
+    <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:10px;">
+      <label style="font-size:13px;">担当者：
+        <select id="bulk-staff-sel" style="font-size:13px;padding:3px 6px;border:1px solid #ccc;border-radius:4px;margin-left:4px;" onchange="onBulkStaffChange()"></select>
+      </label>
+      <span style="font-size:12px;color:#555;">適用開始月：<select id="bulk-s-y" style="font-size:12px;padding:2px;"></select>年<select id="bulk-s-m" style="font-size:12px;padding:2px;"></select>月</span>
+      <div id="bulk-np-filter" style="display:none;gap:4px;display:flex;">
+        <button id="bulk-f-all" class="btn btn-primary btn-sm" onclick="setBulkNpFilter('all')">全て</button>
+        <button id="bulk-f-H" class="btn btn-secondary btn-sm" onclick="setBulkNpFilter('H')">H紙</button>
+        <button id="bulk-f-N" class="btn btn-secondary btn-sm" onclick="setBulkNpFilter('N')">N紙</button>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:8px;align-items:center;flex-wrap:wrap;">
+      <input type="text" id="bulk-search" placeholder="名前で絞り込み" oninput="renderBulkList()" style="flex:1;min-width:160px;padding:5px 8px;border:1px solid #ccc;border-radius:4px;font-size:13px;">
+      <label style="font-size:12px;display:flex;align-items:center;gap:4px;cursor:pointer;white-space:nowrap;">
+        <input type="checkbox" id="bulk-unset-only" onchange="renderBulkList()" checked> 未設定のみ表示
+      </label>
+      <button class="btn btn-secondary btn-sm" onclick="bulkSelectAll()">全選択</button>
+      <button class="btn btn-secondary btn-sm" onclick="bulkDeselectAll()">全解除</button>
+    </div>
+    <div id="bulk-assign-list" style="border:1px solid #ddd;border-radius:4px;max-height:420px;overflow-y:auto;padding:2px;"></div>
+    <div style="margin-top:6px;font-size:12px;color:#888;" id="bulk-selected-count"></div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('modal-bulk-assign')">キャンセル</button>
+      <button class="btn btn-primary" onclick="saveBulkAssign()">保存</button>
     </div>
   </div>
 </div>
@@ -1484,6 +1521,165 @@ async function renderStaff() {
   }
   el.innerHTML = html;
 }
+
+// ── 一括担当設定 ─────────────────────────────────────────────────────────────
+let _bulkCurrentAssignments = [];
+let _bulkNpFilter = 'all';
+
+async function openBulkAssignModal(type) {
+  document.getElementById('bulk-assign-type').value = type;
+  document.getElementById('bulk-assign-title').textContent =
+    type === 'delivery' ? '一括 個別配達担当設定' : '一括 集金担当設定';
+  const staffSel = document.getElementById('bulk-staff-sel');
+  const filtered = staffList.filter(s => type === 'delivery' ? s.is_deliverer : s.is_collector);
+  staffSel.innerHTML = filtered.map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join('');
+  const npFilter = document.getElementById('bulk-np-filter');
+  npFilter.style.display = type === 'delivery' ? 'flex' : 'none';
+  _bulkNpFilter = 'all';
+  ['all','H','N'].forEach(x => {
+    const b = document.getElementById(`bulk-f-${x}`);
+    b.className = `btn btn-sm ${x==='all'?'btn-primary':'btn-secondary'}`;
+  });
+  populateMonthPicker('bulk-s');
+  document.getElementById('bulk-search').value = '';
+  document.getElementById('bulk-unset-only').checked = true;
+  await _refreshBulkAssignments();
+  renderBulkList();
+  openModal('modal-bulk-assign');
+}
+
+async function onBulkStaffChange() {
+  await _refreshBulkAssignments();
+  renderBulkList();
+}
+
+async function _refreshBulkAssignments() {
+  const type = document.getElementById('bulk-assign-type').value;
+  const sid = parseInt(document.getElementById('bulk-staff-sel').value);
+  if (!sid) { _bulkCurrentAssignments = []; return; }
+  if (type === 'delivery') {
+    _bulkCurrentAssignments = await api('GET', `/staff/${sid}/delivery-assignments`) || [];
+  } else {
+    _bulkCurrentAssignments = await api('GET', `/staff/${sid}/assignments`) || [];
+  }
+}
+
+function setBulkNpFilter(f) {
+  _bulkNpFilter = f;
+  ['all','H','N'].forEach(x => {
+    const b = document.getElementById(`bulk-f-${x}`);
+    b.className = `btn btn-sm ${x===f?'btn-primary':'btn-secondary'}`;
+  });
+  renderBulkList();
+}
+
+function renderBulkList() {
+  const type = document.getElementById('bulk-assign-type').value;
+  const q = document.getElementById('bulk-search').value.trim().toLowerCase();
+  const unsetOnly = document.getElementById('bulk-unset-only').checked;
+
+  const assignedKeys = new Set();
+  if (type === 'delivery') {
+    for (const a of _bulkCurrentAssignments) assignedKeys.add(`${a.reader_id}:${a.newspaper_id}`);
+  } else {
+    for (const a of _bulkCurrentAssignments) assignedKeys.add(String(a.id));
+  }
+
+  let rows = [];
+  if (type === 'delivery') {
+    for (const r of readers) {
+      if (q && !r.name.toLowerCase().includes(q)) continue;
+      for (const sub of (r.subscriptions||[])) {
+        if (!sub.is_print || sub.status === 'inactive') continue;
+        if ((r.courses||[]).some(c => c.newspaper_type === sub.newspaper_type)) continue;
+        if (_bulkNpFilter !== 'all' && sub.newspaper_type !== _bulkNpFilter) continue;
+        const key = `${r.id}:${sub.newspaper_id}`;
+        const isAssignedToThis = assignedKeys.has(key);
+        const hasOther = (r.delivery_staff||[]).some(d => d.newspaper_id === sub.newspaper_id) && !isAssignedToThis;
+        if (unsetOnly && hasOther) continue; // already assigned to someone else
+        rows.push({r, sub, key, isAssignedToThis, hasOther});
+      }
+    }
+    const el = document.getElementById('bulk-assign-list');
+    if (!rows.length) { el.innerHTML = '<div style="padding:12px;color:#aaa;font-size:13px;text-align:center;">対象の読者がいません</div>'; document.getElementById('bulk-selected-count').textContent=''; return; }
+    el.innerHTML = rows.map(({r, sub, key, isAssignedToThis}) => `
+      <label style="display:flex;align-items:center;gap:8px;padding:5px 10px;border-bottom:1px solid #f0f0f0;cursor:pointer;font-size:13px;">
+        <input type="checkbox" data-bulk-key="${key}" data-bulk-rid="${r.id}" data-bulk-nid="${sub.newspaper_id}" ${isAssignedToThis?'checked':''} onchange="updateBulkCount()">
+        <span style="flex:1;">${esc(r.name)}</span>
+        <span style="font-size:11px;color:#888;">${esc(sub.newspaper_name)}</span>
+        ${isAssignedToThis?'<span style="font-size:10px;color:#2e7d32;background:#e8f5e9;padding:1px 6px;border-radius:3px;">設定済</span>':''}
+      </label>`).join('');
+  } else {
+    for (const r of readers) {
+      if (q && !r.name.toLowerCase().includes(q)) continue;
+      const needsColl = (r.subscriptions||[]).some(s => s.status === 'active' && s.payment_method === 'cash');
+      if (!needsColl) continue;
+      const key = String(r.id);
+      const isAssignedToThis = assignedKeys.has(key);
+      const hasOther = !!r.collection_staff && !isAssignedToThis;
+      if (unsetOnly && hasOther) continue;
+      rows.push({r, key, isAssignedToThis});
+    }
+    const el = document.getElementById('bulk-assign-list');
+    if (!rows.length) { el.innerHTML = '<div style="padding:12px;color:#aaa;font-size:13px;text-align:center;">対象の読者がいません</div>'; document.getElementById('bulk-selected-count').textContent=''; return; }
+    el.innerHTML = rows.map(({r, key, isAssignedToThis}) => `
+      <label style="display:flex;align-items:center;gap:8px;padding:5px 10px;border-bottom:1px solid #f0f0f0;cursor:pointer;font-size:13px;">
+        <input type="checkbox" data-bulk-key="${key}" data-bulk-rid="${r.id}" ${isAssignedToThis?'checked':''} onchange="updateBulkCount()">
+        <span style="flex:1;">${esc(r.name)}</span>
+        ${isAssignedToThis?'<span style="font-size:10px;color:#2e7d32;background:#e8f5e9;padding:1px 6px;border-radius:3px;">設定済</span>':''}
+      </label>`).join('');
+  }
+  updateBulkCount();
+}
+
+function updateBulkCount() {
+  const checked = document.querySelectorAll('#bulk-assign-list input[type=checkbox]:checked').length;
+  document.getElementById('bulk-selected-count').textContent = checked ? `${checked}件選択中` : '';
+}
+
+function bulkSelectAll() {
+  document.querySelectorAll('#bulk-assign-list input[type=checkbox]').forEach(c => c.checked = true);
+  updateBulkCount();
+}
+
+function bulkDeselectAll() {
+  document.querySelectorAll('#bulk-assign-list input[type=checkbox]').forEach(c => c.checked = false);
+  updateBulkCount();
+}
+
+async function saveBulkAssign() {
+  const type = document.getElementById('bulk-assign-type').value;
+  const sid = parseInt(document.getElementById('bulk-staff-sel').value);
+  const { start_year, start_month } = getMonthPicker('bulk-s');
+  if (!sid) { alert('担当者を選択してください'); return; }
+  if (!start_year || !start_month) { alert('適用開始月を設定してください'); return; }
+
+  const allCheckboxes = [...document.querySelectorAll('#bulk-assign-list input[type=checkbox]')];
+  const checkedKeys = new Set(allCheckboxes.filter(c => c.checked).map(c => c.dataset.bulkKey));
+  const uncheckedKeys = new Set(allCheckboxes.filter(c => !c.checked).map(c => c.dataset.bulkKey));
+
+  if (type === 'delivery') {
+    // Start from existing, add checked, remove unchecked
+    const existingKeys = new Set(_bulkCurrentAssignments.map(a => `${a.reader_id}:${a.newspaper_id}`));
+    for (const k of checkedKeys) existingKeys.add(k);
+    for (const k of uncheckedKeys) existingKeys.delete(k);
+    const assignments = [...existingKeys].map(k => {
+      const [rid, nid] = k.split(':').map(Number);
+      return { reader_id: rid, newspaper_id: nid };
+    });
+    await api('PUT', `/staff/${sid}/delivery-assignments`, { assignments, start_year, start_month });
+  } else {
+    const existingIds = new Set(_bulkCurrentAssignments.map(a => String(a.id)));
+    for (const k of checkedKeys) existingIds.add(k);
+    for (const k of uncheckedKeys) existingIds.delete(k);
+    const reader_ids = [...existingIds].map(Number);
+    await api('PUT', `/staff/${sid}/assignments`, { reader_ids, start_year, start_month });
+  }
+
+  closeModal('modal-bulk-assign');
+  await loadReaders();
+}
+// ─────────────────────────────────────────────────────────────────────────────
 
 function toggleStaffSection(type) {
   if (type === 'delivery') {
