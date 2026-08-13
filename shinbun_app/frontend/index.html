@@ -1416,6 +1416,12 @@ async function saveReader() {
   if (!body.name) { alert('名前は必須です'); return; }
   if (id) await api('PUT', `/readers/${id}`, body);
   else {
+    const dupes = readers.filter(r => r.name === body.name);
+    if (dupes.length) {
+      const list = dupes.map(r => `・${r.name}（住所：${r.address || '未登録'}）`).join('\n');
+      const msg = `同じ名前の読者が既に登録されています：\n${list}\n\n続けて登録しますか？`;
+      if (!confirm(msg)) return;
+    }
     const res = await api('POST', '/readers', body);
     document.getElementById('reader-id').value = res.id;
   }
