@@ -621,11 +621,15 @@ const FIXED_PRICE_CATS = [
   { key: 'delivery_n', label: 'N配達単価（コース未所属）', color: '#1a3a5c' },
 ];
 
+// ── 一時的な「現在日付」オーバーライド（2025年入力完了後に削除） ────────────
+const _APP_TODAY_Y = 2025;
+const _APP_TODAY_M = 12;
+// ─────────────────────────────────────────────────────────────────────────────
+
 // ── Init ──────────────────────────────────────────────────────────────────
 (async () => {
-  const now = new Date();
-  document.getElementById('sub-year').value = now.getFullYear();
-  document.getElementById('sub-month').value = now.getMonth() + 1;
+  document.getElementById('sub-year').value = _APP_TODAY_Y;
+  document.getElementById('sub-month').value = _APP_TODAY_M;
   await Promise.all([loadNewspapers(), loadReaders(), loadStaff(), loadUnitPrices(), loadCourses()]);
 })();
 
@@ -653,9 +657,8 @@ const openModal  = id => document.getElementById(id).classList.add('open');
 const esc = s => s ? String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;') : '';
 
 function populateMonthPicker(prefix, defY, defM) {
-  const now = new Date();
-  const dy = defY || now.getFullYear();
-  const dm = defM || (now.getMonth() + 1);
+  const dy = defY || _APP_TODAY_Y;
+  const dm = defM || _APP_TODAY_M;
   const yEl = document.getElementById(`${prefix}-y`);
   const mEl = document.getElementById(`${prefix}-m`);
   if (!yEl || !mEl) return;
