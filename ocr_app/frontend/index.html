@@ -1186,13 +1186,32 @@ function _updateFilterDownloadBar(filtered) {
 async function downloadFilteredExcel() {
   const ids = _filteredPhotos().map(p => p.id).join(',');
   if (!ids) return;
-  window.location.href = `${API}/api/export?ids=${ids}`;
+  const res = await fetch(`${API}/api/export?ids=${ids}`, {
+    headers: authToken ? { 'Authorization': `Bearer ${authToken}` } : {}
+  });
+  if (!res.ok) { toast('Excelダウンロードに失敗しました'); return; }
+  const blob = await res.blob();
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `photos_${new Date().toISOString().slice(0,10)}.xlsx`;
+  a.click();
 }
 
 async function downloadFilteredZip() {
   const ids = _filteredPhotos().map(p => p.id).join(',');
   if (!ids) return;
-  window.location.href = `${API}/api/export/zip?ids=${ids}`;
+  const btn = document.getElementById('flt-dl-zip-btn');
+  btn.disabled = true;
+  const res = await fetch(`${API}/api/export/zip?ids=${ids}`, {
+    headers: authToken ? { 'Authorization': `Bearer ${authToken}` } : {}
+  });
+  btn.disabled = false;
+  if (!res.ok) { toast('ZIPダウンロードに失敗しました'); return; }
+  const blob = await res.blob();
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `photos_${new Date().toISOString().slice(0,10)}.zip`;
+  a.click();
 }
 
 function applyFilter() {
