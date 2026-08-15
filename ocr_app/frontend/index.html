@@ -156,7 +156,16 @@
   #toast.show { opacity: 1; }
 
   /* ── Filter panel ── */
-  .filter-panel { flex-direction:column; gap:6px; margin-bottom:10px; padding:10px 12px; background:white; border-radius:6px; border:1px solid #e8e8e8; }
+  .filter-panel { flex-direction:column; gap:6px; padding:10px 12px; background:white; border-radius:6px 6px 0 0; border:1px solid #e8e8e8; }
+  #filter-download-bar { display:none; align-items:center; gap:8px; padding:7px 12px; background:#eef4fb; border:1px solid #b5d4f4; border-top:none; border-radius:0 0 6px 6px; margin-bottom:10px; }
+  #filter-download-bar.visible { display:flex; }
+  .flt-dl-label { font-size:12px; color:#185fa5; font-weight:600; white-space:nowrap; }
+  .flt-dl-btn { display:flex; align-items:center; gap:4px; padding:4px 11px; border-radius:5px; font-size:12px; cursor:pointer; border:1.5px solid; background:white; font-weight:500; }
+  .flt-dl-btn-excel { border-color:#1a6bbf; color:#1a6bbf; }
+  .flt-dl-btn-excel:hover { background:#eef4fb; }
+  .flt-dl-btn-zip   { border-color:#0f6e56; color:#0f6e56; }
+  .flt-dl-btn-zip:hover   { background:#e1f5ee; }
+  .flt-dl-note { font-size:11px; color:#666; margin-left:auto; }
   .filter-row { display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
   .filter-panel select { padding:4px 8px; border:1px solid #ccc; border-radius:5px; font-size:12px; background:white; }
   .filter-panel input[type=text] { flex:1; min-width:130px; padding:4px 8px; border:1px solid #ccc; border-radius:5px; font-size:12px; }
@@ -297,6 +306,12 @@
           <button class="flt-tag" data-flt-group="中古iPhone"         onclick="toggleFltTag(this,'group')">中古iPhone</button>
           <button class="flt-tag" data-flt-group="未振り分け"         onclick="toggleFltTag(this,'group')">未振り分け</button>
         </div>
+      </div>
+      <div id="filter-download-bar">
+        <span class="flt-dl-label">絞り込み結果をダウンロード</span>
+        <button class="flt-dl-btn flt-dl-btn-excel" onclick="downloadFilteredExcel()" id="flt-dl-excel-btn">📊 Excelで保存</button>
+        <button class="flt-dl-btn flt-dl-btn-zip"   onclick="downloadFilteredZip()"   id="flt-dl-zip-btn">📁 写真をZIPで保存</button>
+        <span class="flt-dl-note">ZIP対象：確定済みのみ</span>
       </div>
 
       <div id="photo-grid" class="photo-grid"></div>
@@ -1143,6 +1158,9 @@ async function toggleFilterPanel() {
 function _applyFilterPanelVisibility() {
   document.getElementById('filter-panel').style.display =
     (filterPanelOpen && photos.length) ? 'flex' : 'none';
+  if (!filterPanelOpen) {
+    document.getElementById('filter-download-bar')?.classList.remove('visible');
+  }
 }
 
 function _updateFilterBadge() {
@@ -1151,6 +1169,30 @@ function _updateFilterBadge() {
   const btn = document.getElementById('filter-toggle-btn');
   btn.textContent = active ? '🔍 絞り込み中' : '🔍 絞り込み';
   btn.classList.toggle('filter-on', filterPanelOpen || !!active);
+}
+
+function _updateFilterDownloadBar(filtered) {
+  const bar = document.getElementById('filter-download-bar');
+  if (!bar) return;
+  const show = filterPanelOpen && filtered && filtered.length > 0;
+  bar.classList.toggle('visible', show);
+  if (!show) return;
+  const n = filtered.length;
+  const doneCount = filtered.filter(p => p.status === 'done').length;
+  document.getElementById('flt-dl-excel-btn').textContent = `📊 Excelで保存（${n}件）`;
+  document.getElementById('flt-dl-zip-btn').textContent   = `📁 写真をZIPで保存（確定済み${doneCount}件）`;
+}
+
+async function downloadFilteredExcel() {
+  const ids = _filteredPhotos().map(p => p.id).join(',');
+  if (!ids) return;
+  window.location.href = `${API}/api/export?ids=${ids}`;
+}
+
+async function downloadFilteredZip() {
+  const ids = _filteredPhotos().map(p => p.id).join(',');
+  if (!ids) return;
+  window.location.href = `${API}/api/export/zip?ids=${ids}`;
 }
 
 function applyFilter() {
@@ -1205,6 +1247,8 @@ function _renderFilteredGrid() {
       ? `${photos.length}枚`
       : `${filtered.length} / ${photos.length}枚`;
   }
+
+  _updateFilterDownloadBar(filtered);
 
   if (!photos.length) {
     grid.innerHTML = ''; empty.style.display = ''; return;

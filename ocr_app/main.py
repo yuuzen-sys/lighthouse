@@ -1200,7 +1200,7 @@ def set_device_group(data: DeviceGroupBody):
 # ─── Export ─────────────────────────────────────────────────────────────────
 
 @app.get("/api/export")
-def export_excel(store_id: int | None = None):
+def export_excel(store_id: int | None = None, ids: str | None = None):
     """Export photo list as Excel (.xlsx)."""
     try:
         import openpyxl
@@ -1209,7 +1209,16 @@ def export_excel(store_id: int | None = None):
         raise HTTPException(500, "openpyxl not installed. Run: pip install openpyxl")
 
     with get_conn() as conn:
-        if store_id:
+        if ids:
+            id_list = [int(i) for i in ids.split(",") if i.strip().isdigit()]
+            placeholders = ",".join("?" * len(id_list))
+            rows = conn.execute(
+                f"""SELECT p.*, s.code as store_code, s.name as store_name
+                   FROM photos p LEFT JOIN stores s ON p.store_id = s.id
+                   WHERE p.id IN ({placeholders}) ORDER BY p.store_id, p.created_at""",
+                id_list
+            ).fetchall()
+        elif store_id:
             rows = conn.execute(
                 """SELECT p.*, s.code as store_code, s.name as store_name
                    FROM photos p LEFT JOIN stores s ON p.store_id = s.id
@@ -1373,13 +1382,22 @@ class FileExportRequest(BaseModel):
 
 
 @app.get("/api/export/zip")
-def export_zip(mode: str = "confirmed", store_id: int | None = None, device_name: str | None = None):
+def export_zip(mode: str = "confirmed", store_id: int | None = None, device_name: str | None = None, ids: str | None = None):
     """Stream a ZIP of photos to the browser. mode=confirmed|unprocessed."""
     import zipfile
 
-    if mode == "unprocessed":
+    if ids:
+        id_list = [int(i) for i in ids.split(",") if i.strip().isdigit()]
+        placeholders = ",".join("?" * len(id_list))
+        q = f"""SELECT p.stored_filename, p.renamed_filename, p.original_filename,
+                      s.code as store_code, s.name as store_name,
+                      p.device_name, p.note, p.non_device_category, p.price
+               FROM photos p LEFT JOIN stores s ON p.store_id = s.id
+               WHERE p.status = 'done' AND p.id IN ({placeholders})"""
+        params: list = id_list
+    elif mode == "unprocessed":
         q = "SELECT stored_filename, original_filename FROM photos WHERE status IN ('pending','skip','error')"
-        params: list = []
+        params = []
         if store_id:
             q += " AND store_id = ?"; params.append(store_id)
     else:
