@@ -281,7 +281,7 @@ hr { border: none; border-top: 1px solid var(--border-lt); margin: 18px 0; }
           <tr><th>項目</th><th>説明</th></tr>
           <tr><td><strong>機種</strong></td><td>セレクトから選択するか「✏ 手入力...」を選んで入力します。<br>「端末以外」を選ぶとカテゴリ選択モードになります（<a href="#s6-cat">6.4</a>参照）。<br>手入力した機種は候補リストに自動登録されます。</td></tr>
           <tr><td><strong>キャリア</strong></td><td>ドコモ・au・SB・UQ・Y!・楽天から複数選択できます。<br>店舗コードの頭文字に応じて<em>暗黙キャリア</em>が自動設定されます（DS→ドコモ、au→au、SB→SB）。</td></tr>
-          <tr><td><strong>契約種別</strong></td><td>「新規」を選択すると「新規契約あり」がファイル名に追加されます。廉価（中華）Android の場合は「割引POP中華A」タグになります。</td></tr>
+          <tr><td><strong>契約種別</strong></td><td>「新規」を選択すると「新規契約あり」がファイル名に追加されます。廉価（中華）Android の場合は「割引POP中華A」タグになります。<br>「MNP」と「機種変更」を同時に選択すると、金額欄が<strong>契約種別ごとの個別入力テーブル</strong>に切り替わります（<a href="#s6-price">6.3</a>参照）。</td></tr>
         </table>
       </div>
 
@@ -295,6 +295,24 @@ hr { border: none; border-top: 1px solid var(--border-lt); margin: 18px 0; }
           <tr><td><strong>金額不明瞭・金額不要</strong></td><td>金額の記載が不明瞭または不要な場合にチェックします。<br>チェックすると金額・頭金欄が無効化されますが、タグは金額ありと同じ（<span class="chip">割引POPI</span>/<span class="chip">割引POPA</span>等）になります。<br>「金額は分からないが、確実に値引き POP である」ことを記録するために使用します。</td></tr>
         </table>
       </div>
+      <div class="note" style="margin-top:14px">
+        <span class="note-icon">📋</span>
+        <strong>契約種別ごとの個別金額入力（MNP・機種変更を同時選択した場合）</strong>
+      </div>
+      <p style="margin-top:8px;font-size:13px">「MNP」と「機種変更」の両方を選択すると、金額入力欄が以下のテーブル形式に切り替わります。</p>
+      <div class="tbl-wrap" style="margin-top:8px">
+        <table>
+          <tr><th>契約種別</th><th>金額（円）</th><th>頭金（円）</th></tr>
+          <tr><td>MNP</td><td><em>（入力欄）</em></td><td><em>（入力欄）</em></td></tr>
+          <tr><td>機種変更</td><td><em>（入力欄）</em></td><td><em>（入力欄）</em></td></tr>
+        </table>
+      </div>
+      <ul style="margin-left:18px;margin-top:8px;font-size:13px;line-height:2">
+        <li>MNP と機種変更で価格が異なる POP に使用します。</li>
+        <li>入力した値は Excel 出力の<strong>調査票用シート</strong>の「PI（MNP）」列・「取換（機種変更）」列に個別に反映されます。</li>
+        <li>リネームプレビューには MNP の金額が使用されます。</li>
+        <li>「金額不明瞭・金額不要」にチェックすると両行の入力欄がまとめて無効化されます。</li>
+      </ul>
 
       <hr>
       <h3 class="sub-title" id="s6-cat">6.4 POP 以外カテゴリ</h3>
@@ -388,7 +406,7 @@ hr { border: none; border-top: 1px solid var(--border-lt); margin: 18px 0; }
       <p>1回の撮影で複数の POP が写っている場合、切り分けで個別の写真として分割できます。</p>
       <div class="steps">
         <div class="step"><span class="step-num">1</span><div class="step-body">モーダル左下の「<strong>✂ 切り分け</strong>」ボタンをクリックします。フォームが非表示になり、切り分けモードに入ります。</div></div>
-        <div class="step"><span class="step-num">2</span><div class="step-body"><strong>4点変換モード（推奨）</strong>: 写真上の POP の四隅をクリックして台形補正します。斜めに撮影した場合でも正面から見た状態に補正されます。<br><strong>矩形モード</strong>: ドラッグで長方形範囲を指定します。</div></div>
+        <div class="step"><span class="step-num">2</span><div class="step-body"><strong>4点変換モード（推奨）</strong>: 写真上の POP の四隅をクリックして台形補正します。斜めに撮影した場合でも正面から見た状態に補正されます。<br><span style="font-size:12px;color:#5a7fab">💡 一手目でクリックした場所が切り抜き後の左上になります。</span><br><strong>矩形モード</strong>: ドラッグで長方形範囲を指定します。</div></div>
         <div class="step"><span class="step-num">3</span><div class="step-body">「✂ 切り分け実行」ボタンをクリックします。指定した範囲が新しい写真として保存されます。</div></div>
         <div class="step"><span class="step-num">4</span><div class="step-body">「キャンセル」で切り分けモードを終了します。元の写真は削除されません。</div></div>
       </div>

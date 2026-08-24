@@ -56,6 +56,12 @@
   #lock-banner { display:none; background:#fef2f2; border-bottom:2px solid #dc2626; color:#dc2626; font-weight:600; font-size:13px; padding:8px 16px; text-align:center; flex-shrink:0; }
   @keyframes pulse-blue { 0%,100%{border-color:#3b82f6} 50%{border-color:#93c5fd} }
   .extra-item-card { border:1px solid #c5d8ef; border-radius:8px; padding:10px; margin-top:8px; background:#f8fbff; }
+  /* per-contract price table */
+  .contract-price-table { width:100%; border-collapse:collapse; font-size:13px; margin-top:4px; }
+  .contract-price-table th { background:#eef4fc; padding:5px 8px; text-align:left; font-weight:600; font-size:12px; color:#5a7fab; }
+  .contract-price-table td { padding:4px 6px; border-bottom:1px solid #e8eef5; vertical-align:middle; }
+  .contract-price-table td.cp-label { font-weight:600; white-space:nowrap; width:80px; color:#3d5a7c; }
+  .contract-price-table input { width:100%; padding:4px 6px; border:1px solid #c5d8ef; border-radius:4px; font-size:13px; box-sizing:border-box; }
   .extra-item-hdr { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; font-size:12px; font-weight:600; color:#5a7fab; }
   .extra-item-hdr button { border:none; background:none; color:#e57373; cursor:pointer; font-size:15px; padding:0 2px; line-height:1; }
   #add-extra-item-btn { margin-top:8px; width:100%; padding:7px; border:1px dashed #7a9cc8; border-radius:6px; background:none; color:#5a7fab; cursor:pointer; font-size:13px; }
@@ -434,17 +440,33 @@
           <label>OCR候補（金額）</label>
           <div class="candidate-list" id="price-cands"></div>
         </div>
+        <!-- 契約種別ごと金額（MNP＋機種変更両方選択時に表示） -->
+        <div id="contract-price-wrap" style="display:none">
+          <div class="form-group">
+            <label>契約種別ごとの金額</label>
+            <table class="contract-price-table">
+              <thead><tr><th>契約種別</th><th>金額（円）</th><th>頭金（円）</th></tr></thead>
+              <tbody id="contract-price-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+        <!-- 単一価格入力（デフォルト） -->
+        <div id="price-single-wrap">
+          <div class="form-group">
+            <label>金額（円）</label>
+            <input type="text" id="f-price" placeholder="例: 87384" oninput="updateRenamePreview()">
+          </div>
+          <div class="form-group">
+            <label>頭金（円）</label>
+            <input type="text" id="f-deposit" placeholder="未記載なら0円">
+          </div>
+        </div>
+        <!-- 金額不明チェック（常に表示） -->
         <div class="form-group">
-          <label>金額（円）</label>
-          <input type="text" id="f-price" placeholder="例: 87384" oninput="updateRenamePreview()">
-          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;margin-top:6px;font-size:12px;font-weight:normal;color:#555">
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;font-weight:normal;color:#555">
             <input type="checkbox" id="f-price-unclear" onchange="onPriceUnclearChange()">
             金額不明瞭・金額不要（「金額不明の端末値引きPOP」として登録）
           </label>
-        </div>
-        <div class="form-group">
-          <label>頭金（円）</label>
-          <input type="text" id="f-deposit" placeholder="未記載なら0円">
         </div>
         <!-- キャリア別金額 -->
         <div id="extra-items-container"></div>
@@ -1603,7 +1625,7 @@ function _onDeviceChange() {
   document.getElementById('non-device-wrap').style.display = val === '__non_device__' ? '' : 'none';
   const hasDevice = val && val !== '__non_device__';
   document.getElementById('contract-wrap').style.display   = hasDevice ? '' : 'none';
-  if (!hasDevice) setContracts([]);
+  if (!hasDevice) { setContracts([]); updateContractPriceSection(); }
   if (val !== '__non_device__') document.getElementById('f-non-device-cat').value = '';
   updateRenamePreview();
 }
@@ -1617,7 +1639,7 @@ function getDeviceName() {
 
 // ── Carrier buttons ────────────────────────────────────────────────────────
 function toggleCarrier(btn)  { btn.classList.toggle('selected'); updateRenamePreview(); }
-function toggleContract(btn) { btn.classList.toggle('selected'); updateRenamePreview(); }
+function toggleContract(btn) { btn.classList.toggle('selected'); updateContractPriceSection(); }
 
 function getSelectedCarriers() {
   return [...document.querySelectorAll('#carrier-group .toggle-btn.selected')].map(b => b.dataset.carrier);
@@ -1633,6 +1655,50 @@ function getSelectedContracts() {
 function setContracts(contracts) {
   document.querySelectorAll('#contract-group .toggle-btn').forEach(b =>
     b.classList.toggle('selected', contracts.includes(b.dataset.contract)));
+}
+
+const _PRICE_CONTRACTS = ['MNP', '機種変更'];
+
+function updateContractPriceSection() {
+  const priceContracts = getSelectedContracts().filter(c => _PRICE_CONTRACTS.includes(c));
+  const isMulti = priceContracts.length >= 2;
+  const multiWrap  = document.getElementById('contract-price-wrap');
+  const singleWrap = document.getElementById('price-single-wrap');
+  if (!multiWrap || !singleWrap) return;
+  multiWrap.style.display  = isMulti ? '' : 'none';
+  singleWrap.style.display = isMulti ? 'none' : '';
+  if (isMulti) _syncContractPriceRows(priceContracts);
+  updateRenamePreview();
+}
+
+function _syncContractPriceRows(contracts) {
+  const tbody = document.getElementById('contract-price-tbody');
+  if (!tbody) return;
+  const existing = {};
+  for (const tr of tbody.querySelectorAll('tr')) {
+    const ct = tr.dataset.contract;
+    existing[ct] = { price: tr.querySelector('.cp-price')?.value || '', deposit: tr.querySelector('.cp-deposit')?.value || '' };
+  }
+  const unclear = document.getElementById('f-price-unclear')?.checked;
+  tbody.innerHTML = '';
+  for (const ct of contracts) {
+    const tr = document.createElement('tr');
+    tr.dataset.contract = ct;
+    const dis = unclear ? ' disabled' : '';
+    tr.innerHTML =
+      `<td class="cp-label">${ct}</td>` +
+      `<td><input type="text" class="cp-price" placeholder="例: 48000" oninput="updateRenamePreview()" value="${existing[ct]?.price || ''}"${dis}></td>` +
+      `<td><input type="text" class="cp-deposit" placeholder="0" value="${existing[ct]?.deposit || ''}"${dis}></td>`;
+    tbody.appendChild(tr);
+  }
+}
+
+function _getEffectivePrice() {
+  const wrap = document.getElementById('contract-price-wrap');
+  if (wrap && wrap.style.display !== 'none') {
+    return (document.querySelector('#contract-price-tbody .cp-price')?.value || '').replace(/[,，\s]/g, '');
+  }
+  return (document.getElementById('f-price')?.value || '').replace(/[,，\s]/g, '');
 }
 
 // ── Photo modal ────────────────────────────────────────────────────────────
@@ -1681,21 +1747,38 @@ async function openPhotoModal(photoId) {
   document.getElementById('f-category').value = photo.device_category || '';
   setCarriers(photo.carriers || []);
   setContracts(photo.contract_types || []);
-  document.getElementById('f-price').value   = photo.price   || '';
-  document.getElementById('f-deposit').value = photo.deposit || '';
-  document.getElementById('f-price-unclear').checked = !!photo.price_unclear;
-  onPriceUnclearChange();
   document.getElementById('f-note').value = photo.note || '';
   document.getElementById('rename-preview').textContent = photo.renamed_filename || '';
 
   // 追加アイテム復元（type で分類）
+  let _contractPriceItems = [];
   try {
     const all = JSON.parse(photo.items_json || '[]');
-    _extraItems   = all.filter(i => !i.type || i.type === 'price');
-    _extraDevices = all.filter(i => i.type === 'device');
+    _extraItems        = all.filter(i => !i.type || i.type === 'price');
+    _extraDevices      = all.filter(i => i.type === 'device');
+    _contractPriceItems = all.filter(i => i.type === 'contract_price');
   } catch { _extraItems = []; _extraDevices = []; }
   renderExtraItems();
   renderExtraDevices();
+
+  // 価格フィールド設定（契約種別ごと or 単一）
+  updateContractPriceSection();
+  const priceContracts = (photo.contract_types || []).filter(c => _PRICE_CONTRACTS.includes(c));
+  if (priceContracts.length >= 2) {
+    const cpMap = {};
+    for (const item of _contractPriceItems) cpMap[item.contract] = item;
+    for (const tr of document.getElementById('contract-price-tbody').querySelectorAll('tr')) {
+      const ct = tr.dataset.contract;
+      const item = cpMap[ct];
+      tr.querySelector('.cp-price').value   = item ? (item.price   || '') : (photo.price   || '');
+      tr.querySelector('.cp-deposit').value = item ? (item.deposit || '') : (photo.deposit || '');
+    }
+  } else {
+    document.getElementById('f-price').value   = photo.price   || '';
+    document.getElementById('f-deposit').value = photo.deposit || '';
+  }
+  document.getElementById('f-price-unclear').checked = !!photo.price_unclear;
+  onPriceUnclearChange();
   document.getElementById('device-cands').innerHTML = '';
   document.getElementById('price-cands').innerHTML = '';
   document.getElementById('raw-box').textContent = '';
@@ -1739,6 +1822,13 @@ function closePhotoModal() {
   _lockReadOnly = false;
   _extraItems   = [];
   _extraDevices = [];
+  // Per-contract price reset
+  const cptbody = document.getElementById('contract-price-tbody');
+  if (cptbody) cptbody.innerHTML = '';
+  const cpWrap = document.getElementById('contract-price-wrap');
+  const spWrap = document.getElementById('price-single-wrap');
+  if (cpWrap) cpWrap.style.display = 'none';
+  if (spWrap) spWrap.style.display = '';
   document.getElementById('f-price-unclear').checked = false;
   onPriceUnclearChange();
   document.getElementById('photo-modal').classList.add('hidden');
@@ -1843,16 +1933,39 @@ function selectDevice(name, category) {
 async function savePhoto() {
   if (!currentPhotoId) return;
   const deviceName = getDeviceName();
+
+  // Collect carrier/device extra items from DOM
+  const extraItems = _getAllExtraItemsFromDom();
+
+  // Per-contract price mode: MNP + 機種変更 both selected
+  const priceContracts = getSelectedContracts().filter(c => _PRICE_CONTRACTS.includes(c));
+  let mainPrice = null, mainDeposit = null;
+  if (priceContracts.length >= 2 && document.getElementById('contract-price-wrap').style.display !== 'none') {
+    let first = true;
+    for (const tr of document.getElementById('contract-price-tbody').querySelectorAll('tr')) {
+      const ct      = tr.dataset.contract;
+      const price   = (tr.querySelector('.cp-price')?.value   || '').replace(/[,，\s]/g, '');
+      const deposit = (tr.querySelector('.cp-deposit')?.value || '').replace(/[,，\s]/g, '');
+      if (price) {
+        extraItems.push({ type: 'contract_price', contract: ct, price, deposit: deposit || '0' });
+        if (first) { mainPrice = price; mainDeposit = deposit || null; first = false; }
+      }
+    }
+  } else {
+    mainPrice   = document.getElementById('f-price').value.replace(/[,，\s]/g, '')   || null;
+    mainDeposit = document.getElementById('f-deposit').value.replace(/[,，\s]/g, '') || null;
+  }
+
   const body = {
     device_name: deviceName,
     device_category: document.getElementById('f-category').value || null,
     carriers: getSelectedCarriers(),
     contract_types: getSelectedContracts(),
     non_device_category: document.getElementById('f-non-device-cat').value || null,
-    price:   document.getElementById('f-price').value.replace(/[,，\s]/g, '')   || null,
-    deposit: document.getElementById('f-deposit').value.replace(/[,，\s]/g, '') || null,
+    price:   mainPrice,
+    deposit: mainDeposit,
     note: document.getElementById('f-note').value || null,
-    extra_items: _getAllExtraItemsFromDom(),
+    extra_items: extraItems,
     price_unclear: document.getElementById('f-price-unclear').checked,
   };
   await apiFetch(`/api/photos/${currentPhotoId}`, {
@@ -2333,7 +2446,7 @@ function _computeTagSeg() {
     document.getElementById('f-device')?.value || '',
     document.getElementById('f-device-manual')?.value?.trim() || '',
     document.getElementById('f-non-device-cat')?.value || '',
-    (document.getElementById('f-price')?.value || '').replace(/[,，\s]/g, ''),
+    _getEffectivePrice(),
     getSelectedCarriers(),
     getSelectedContracts(),
     document.getElementById('f-price-unclear')?.checked || false
@@ -2347,6 +2460,11 @@ function onPriceUnclearChange() {
   priceEl.disabled   = checked;
   depositEl.disabled = checked;
   if (checked) { priceEl.value = ''; depositEl.value = ''; }
+  // Also disable per-contract inputs
+  document.querySelectorAll('#contract-price-tbody .cp-price, #contract-price-tbody .cp-deposit').forEach(el => {
+    el.disabled = checked;
+    if (checked) el.value = '';
+  });
   updateRenamePreview();
 }
 

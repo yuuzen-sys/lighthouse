@@ -1262,21 +1262,30 @@ def _build_survey_sheet(wb, store_id: int | None = None):
         except Exception:
             carriers = [None]
 
-        entries: list[tuple] = [(price_num, deposit)]
+        entries_default: list[tuple] = [(price_num, deposit)]
+        contract_specific: dict = {}  # {contract: (price, deposit)} from per-contract input
         try:
             for ex in json.loads(r.get("items_json") or "[]"):
                 if ex.get("type") == "price":
                     ep = _parse_price(ex.get("price"))
                     if ep is not None:
-                        entries.append((ep, ex.get("deposit") or "0"))
+                        entries_default.append((ep, ex.get("deposit") or "0"))
+                elif ex.get("type") == "contract_price":
+                    ct_key = ex.get("contract")
+                    if ct_key in CONTRACT_KEYS:
+                        ep = _parse_price(ex.get("price"))
+                        if ep is not None:
+                            contract_specific[ct_key] = (ep, ex.get("deposit") or "0")
         except Exception:
             pass
 
         for ct in contracts:
             if ct not in CONTRACT_KEYS:
                 continue
+            # Per-contract price takes priority; fall back to default entries
+            ct_entries = [contract_specific[ct]] if ct in contract_specific else entries_default
             for car in carriers:
-                for ep, ed in entries:
+                for ep, ed in ct_entries:
                     key = (store_code, device, car, ct)
                     prev = price_map.get(key)
                     if prev is None or ep < prev[0]:
