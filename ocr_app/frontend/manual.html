@@ -279,7 +279,7 @@ hr { border: none; border-top: 1px solid var(--border-lt); margin: 18px 0; }
       <div class="tbl-wrap">
         <table>
           <tr><th>項目</th><th>説明</th></tr>
-          <tr><td><strong>機種</strong></td><td>セレクトから選択するか「✏ 手入力...」を選んで入力します。<br>「端末以外」を選ぶとカテゴリ選択モードになります（<a href="#s6-cat">6.4</a>参照）。<br>手入力した機種は候補リストに自動登録されます。</td></tr>
+          <tr><td><strong>機種</strong></td><td>セレクトから選択するか「✏ 手入力...」を選んで入力します。<br>「端末以外」を選ぶとカテゴリ選択モードになります（<a href="#s6-cat">6.4</a>参照）。<br>手入力した機種は候補リストに自動登録されます。<br>「設定 → リネームタグ（1:1対応）」に登録された機種を選ぶと、<strong>金額入力エリアがオレンジ色でハイライト</strong>されます。調査票用 Excel への転記対象であることを示しています（<a href="#s6-price">6.3</a>参照）。</td></tr>
           <tr><td><strong>キャリア</strong></td><td>ドコモ・au・SB・UQ・Y!・楽天から複数選択できます。<br>店舗コードの頭文字に応じて<em>暗黙キャリア</em>が自動設定されます（DS→ドコモ、au→au、SB→SB）。</td></tr>
           <tr><td><strong>契約種別</strong></td><td>「新規」を選択すると「新規契約あり」がファイル名に追加されます。廉価（中華）Android の場合は「割引POP中華A」タグになります。<br>「MNP」と「機種変更」を同時に選択すると、金額欄が<strong>契約種別ごとの個別入力テーブル</strong>に切り替わります（<a href="#s6-price">6.3</a>参照）。</td></tr>
         </table>
@@ -287,6 +287,10 @@ hr { border: none; border-top: 1px solid var(--border-lt); margin: 18px 0; }
 
       <hr>
       <h3 class="sub-title" id="s6-price">6.3 金額・頭金の設定</h3>
+      <div class="note" style="margin-bottom:12px">
+        <span class="note-icon">⭐</span>
+        <span>調査票対象端末（リネームタグ 1:1対応に登録済み）を選択すると、金額入力エリア全体がオレンジ色でハイライトされ「調査票対象」バッジが表示されます。入力した金額は Excel 調査票用シートに自動転記されます。</span>
+      </div>
       <div class="tbl-wrap">
         <table>
           <tr><th>項目</th><th>説明</th></tr>
