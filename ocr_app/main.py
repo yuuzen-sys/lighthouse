@@ -1233,10 +1233,13 @@ def _build_survey_sheet(wb, store_id: int | None = None):
             ([store_id] if store_id else [])
         ).fetchall()
 
+    # Device columns: all keys registered in rename_tags (1:1 mapping), in registration order
+    candidates = _load_candidates()
+    rename_tags: dict = candidates.get("rename_tags", {})
+    devices_ordered: list = list(rename_tags.keys())
+
     # price_map: {(store_code, device, carrier_or_None, contract): (min_price, deposit)}
     price_map: dict = {}
-    devices_ordered: list = []
-    devices_seen: set = set()
     CONTRACT_KEYS = ("MNP", "機種変更")
 
     for r in price_rows:
@@ -1269,10 +1272,6 @@ def _build_survey_sheet(wb, store_id: int | None = None):
         except Exception:
             pass
 
-        if device not in devices_seen:
-            devices_seen.add(device)
-            devices_ordered.append(device)
-
         for ct in contracts:
             if ct not in CONTRACT_KEYS:
                 continue
@@ -1282,8 +1281,6 @@ def _build_survey_sheet(wb, store_id: int | None = None):
                     prev = price_map.get(key)
                     if prev is None or ep < prev[0]:
                         price_map[key] = (ep, ed)
-
-    devices_ordered.sort()
 
     # Row expansion: return list of (区分ラベル, carrier_filter)
     def _row_defs(code: str) -> list[tuple[str, str | None]]:
