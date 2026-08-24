@@ -1200,9 +1200,10 @@ def set_device_group(data: DeviceGroupBody):
 # ─── Export helpers ──────────────────────────────────────────────────────────
 
 def _build_survey_sheet(wb, store_id: int | None = None):
-    """Add 調査票用 sheet: stores × devices, PI(MNP) and 取換(機種変更) min prices."""
+    """Add 調査票用 sheet: stores × devices with carrier-split rows, PI(MNP) / 取換(機種変更) min prices."""
     import re as _re
-    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    from openpyxl.styles import Font, PatternFill, Alignment
+    from openpyxl.utils import get_column_letter
 
     def _parse_price(p):
         if not p:
@@ -1214,8 +1215,8 @@ def _build_survey_sheet(wb, store_id: int | None = None):
         d = _re.sub(r"[^\d]", "", str(dep or "")) or "0"
         return f"{price_num:,}({int(d):,})"
 
-    q = """SELECT p.price, p.deposit, p.contract_types, p.device_name, p.items_json,
-                  s.code as store_code, s.name as store_name, s.id as store_id_val
+    q = """SELECT p.price, p.deposit, p.contract_types, p.device_name, p.carriers, p.items_json,
+                  s.code as store_code, s.name as store_name
            FROM photos p LEFT JOIN stores s ON p.store_id = s.id
            WHERE p.status = 'done'
              AND p.device_name IS NOT NULL AND p.device_name != ''"""
@@ -1226,17 +1227,17 @@ def _build_survey_sheet(wb, store_id: int | None = None):
     with get_conn() as conn:
         price_rows = conn.execute(q, params).fetchall()
         store_rows = conn.execute(
-            "SELECT id, code, name FROM stores ORDER BY id"
-            + (" WHERE id = ?" if store_id else ""),
+            ("SELECT id, code, name FROM stores WHERE id = ? ORDER BY id"
+             if store_id else
+             "SELECT id, code, name FROM stores ORDER BY id"),
             ([store_id] if store_id else [])
         ).fetchall()
 
-    # {(store_code, device): {'MNP': (min_price, deposit), '機種変更': (min_price, deposit)}}
+    # price_map: {(store_code, device, carrier_or_None, contract): (min_price, deposit)}
     price_map: dict = {}
     devices_ordered: list = []
     devices_seen: set = set()
-
-    CONTRACT_COLS = {"MNP": "PI（MNP）", "機種変更": "取換（機種変更）"}
+    CONTRACT_KEYS = ("MNP", "機種変更")
 
     for r in price_rows:
         r = dict(r)
@@ -1247,85 +1248,107 @@ def _build_survey_sheet(wb, store_id: int | None = None):
         if price_num is None:
             continue
         store_code = r.get("store_code") or ""
-        deposit = r.get("deposit") or "0"
+        deposit    = r.get("deposit") or "0"
 
         try:
             contracts = json.loads(r.get("contract_types") or "[]")
         except Exception:
             contracts = []
-
-        # also check items_json for extra price entries
         try:
-            extras = [i for i in json.loads(r.get("items_json") or "[]") if i.get("type") == "price"]
+            carriers = json.loads(r.get("carriers") or "[]") or [None]
         except Exception:
-            extras = []
+            carriers = [None]
 
-        for ct in contracts:
-            if ct not in CONTRACT_COLS:
-                continue
-            key = (store_code, device)
-            if key not in price_map:
-                price_map[key] = {}
-            prev = price_map[key].get(ct)
-            if prev is None or price_num < prev[0]:
-                price_map[key][ct] = (price_num, deposit)
-
-        # items_json additional prices with same contract
-        for ex in extras:
-            ex_price = _parse_price(ex.get("price"))
-            if ex_price is None:
-                continue
-            ex_dep = ex.get("deposit") or "0"
-            for ct in contracts:
-                if ct not in CONTRACT_COLS:
-                    continue
-                key = (store_code, device)
-                if key not in price_map:
-                    price_map[key] = {}
-                prev = price_map[key].get(ct)
-                if prev is None or ex_price < prev[0]:
-                    price_map[key][ct] = (ex_price, ex_dep)
+        entries: list[tuple] = [(price_num, deposit)]
+        try:
+            for ex in json.loads(r.get("items_json") or "[]"):
+                if ex.get("type") == "price":
+                    ep = _parse_price(ex.get("price"))
+                    if ep is not None:
+                        entries.append((ep, ex.get("deposit") or "0"))
+        except Exception:
+            pass
 
         if device not in devices_seen:
             devices_seen.add(device)
             devices_ordered.append(device)
 
+        for ct in contracts:
+            if ct not in CONTRACT_KEYS:
+                continue
+            for car in carriers:
+                for ep, ed in entries:
+                    key = (store_code, device, car, ct)
+                    prev = price_map.get(key)
+                    if prev is None or ep < prev[0]:
+                        price_map[key] = (ep, ed)
+
     devices_ordered.sort()
 
-    ws2 = wb.create_sheet("調査票用")
+    # Row expansion: return list of (区分ラベル, carrier_filter)
+    def _row_defs(code: str) -> list[tuple[str, str | None]]:
+        if "量販" in code:
+            return [
+                ("ドコモ量販", "ドコモ"),
+                ("au量販",     "au"),
+                ("au量販（UQ）", "UQ"),
+                ("SB量販",     "SB"),
+                ("SB量販（Y!）", "Y!"),
+                ("楽天量販",   "楽天"),
+            ]
+        if "au" in code:
+            return [("au", "au"), ("UQ", "UQ")]
+        if "SB" in code:
+            return [("SB", "SB"), ("Y!", "Y!")]
+        return [("", None)]
+
+    def _lookup(store_code: str, device: str, carrier_filter: str | None, ct: str):
+        if carrier_filter is None:
+            best = None
+            for (sc, dv, car, c), val in price_map.items():
+                if sc == store_code and dv == device and c == ct:
+                    if best is None or val[0] < best[0]:
+                        best = val
+            return best
+        return price_map.get((store_code, device, carrier_filter, ct))
 
     # Styles
+    ws2 = wb.create_sheet("調査票用")
     h1_fill = PatternFill(start_color="2B5799", end_color="2B5799", fill_type="solid")
     h1_font = Font(color="FFFFFF", bold=True, name="Arial", size=10)
     h2_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
     h2_font = Font(color="FFFFFF", bold=True, name="Arial", size=9)
     data_font = Font(name="Arial", size=10)
-    center  = Alignment(horizontal="center", vertical="center", wrap_text=True)
-    thin    = Side(style="thin", color="AAAAAA")
-    border  = Border(left=thin, right=thin, top=thin, bottom=thin)
+    center = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    ROW_FILLS = {
+        "ドコモ量販": PatternFill(start_color="DCE6F1", end_color="DCE6F1", fill_type="solid"),
+        "au量販":     PatternFill(start_color="E2F0D9", end_color="E2F0D9", fill_type="solid"),
+        "au量販（UQ）": PatternFill(start_color="E2F0D9", end_color="E2F0D9", fill_type="solid"),
+        "SB量販":     PatternFill(start_color="FFF2CC", end_color="FFF2CC", fill_type="solid"),
+        "SB量販（Y!）": PatternFill(start_color="FFF2CC", end_color="FFF2CC", fill_type="solid"),
+        "楽天量販":   PatternFill(start_color="FCE4D6", end_color="FCE4D6", fill_type="solid"),
+        "UQ": PatternFill(start_color="E2F0D9", end_color="E2F0D9", fill_type="solid"),
+        "Y!": PatternFill(start_color="FFF2CC", end_color="FFF2CC", fill_type="solid"),
+    }
+    total_cols = 3 + len(devices_ordered) * 2
 
-    # Row 1: 番号 | 店舗名 | [Device (merged 2 cols)] ...
-    ws2.cell(1, 1, "番号").fill = h1_fill
-    ws2.cell(1, 1).font = h1_font
-    ws2.cell(1, 1).alignment = center
-    ws2.cell(1, 2, "店舗名").fill = h1_fill
-    ws2.cell(1, 2).font = h1_font
-    ws2.cell(1, 2).alignment = center
-
+    # Header row 1: 番号 | 区分 | 店舗名 | [Device merged] ...
+    for col_i, label in enumerate(["番号", "区分", "店舗名"], 1):
+        c = ws2.cell(1, col_i, label)
+        c.fill = h1_fill; c.font = h1_font; c.alignment = center
     for i, dev in enumerate(devices_ordered):
-        col = 3 + i * 2
+        col = 4 + i * 2
         c = ws2.cell(1, col, dev)
         c.fill = h1_fill; c.font = h1_font; c.alignment = center
         ws2.merge_cells(start_row=1, start_column=col, end_row=1, end_column=col + 1)
 
-    # Row 2: blank | blank | PI（MNP） | 取換（機種変更） | ...
-    ws2.cell(2, 1, "").fill = h2_fill
-    ws2.cell(2, 2, "").fill = h2_fill
+    # Header row 2: sub-labels
+    for col_i in range(1, 4):
+        ws2.cell(2, col_i).fill = h2_fill
     for i in range(len(devices_ordered)):
-        col = 3 + i * 2
-        c1 = ws2.cell(2, col,   "PI（MNP）")
-        c2 = ws2.cell(2, col+1, "取換（機種変更）")
-        for c in (c1, c2):
+        col = 4 + i * 2
+        for label, c_col in [("PI（MNP）", col), ("取換（機種変更）", col + 1)]:
+            c = ws2.cell(2, c_col, label)
             c.fill = h2_fill; c.font = h2_font; c.alignment = center
 
     # Data rows
@@ -1334,30 +1357,35 @@ def _build_survey_sheet(wb, store_id: int | None = None):
         s = dict(s)
         code = s.get("code") or ""
         name = s.get("name") or ""
-        ws2.cell(row_num, 1, code).font = data_font
-        ws2.cell(row_num, 2, name).font = data_font
-        for i, dev in enumerate(devices_ordered):
-            col = 3 + i * 2
-            key = (code, dev)
-            mnp  = price_map.get(key, {}).get("MNP")
-            kika = price_map.get(key, {}).get("機種変更")
-            c1 = ws2.cell(row_num, col,   _fmt(*mnp)  if mnp  else "")
-            c2 = ws2.cell(row_num, col+1, _fmt(*kika) if kika else "")
-            c1.font = data_font; c1.alignment = Alignment(horizontal="center")
-            c2.font = data_font; c2.alignment = Alignment(horizontal="center")
-        row_num += 1
+        for label, carrier_filter in _row_defs(code):
+            row_fill = ROW_FILLS.get(label)
+            ws2.cell(row_num, 1, code).font = data_font
+            ws2.cell(row_num, 2, label).font = data_font
+            ws2.cell(row_num, 3, name).font = data_font
+            if row_fill:
+                for ci in range(1, total_cols + 1):
+                    ws2.cell(row_num, ci).fill = row_fill
+            for i, dev in enumerate(devices_ordered):
+                col = 4 + i * 2
+                mnp  = _lookup(code, dev, carrier_filter, "MNP")
+                kika = _lookup(code, dev, carrier_filter, "機種変更")
+                for val, ci in [(mnp, col), (kika, col + 1)]:
+                    c = ws2.cell(row_num, ci, _fmt(*val) if val else "")
+                    c.font = data_font
+                    c.alignment = Alignment(horizontal="center")
+            row_num += 1
 
     # Column widths
     ws2.column_dimensions["A"].width = 12
-    ws2.column_dimensions["B"].width = 24
+    ws2.column_dimensions["B"].width = 14
+    ws2.column_dimensions["C"].width = 26
     for i in range(len(devices_ordered)):
-        from openpyxl.utils import get_column_letter
-        ws2.column_dimensions[get_column_letter(3 + i * 2    )].width = 14
-        ws2.column_dimensions[get_column_letter(3 + i * 2 + 1)].width = 16
+        ws2.column_dimensions[get_column_letter(4 + i * 2    )].width = 14
+        ws2.column_dimensions[get_column_letter(4 + i * 2 + 1)].width = 16
 
-    ws2.row_dimensions[1].height = 28
+    ws2.row_dimensions[1].height = 30
     ws2.row_dimensions[2].height = 20
-    ws2.freeze_panes = "C3"
+    ws2.freeze_panes = "D3"
 
 
 # ─── Export ─────────────────────────────────────────────────────────────────
