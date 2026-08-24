@@ -56,6 +56,11 @@
   #lock-banner { display:none; background:#fef2f2; border-bottom:2px solid #dc2626; color:#dc2626; font-weight:600; font-size:13px; padding:8px 16px; text-align:center; flex-shrink:0; }
   @keyframes pulse-blue { 0%,100%{border-color:#3b82f6} 50%{border-color:#93c5fd} }
   .extra-item-card { border:1px solid #c5d8ef; border-radius:8px; padding:10px; margin-top:8px; background:#f8fbff; }
+  /* 1:1対応端末選択時の金額欄ハイライト */
+  #price-area { border-radius: 8px; padding: 6px 8px; border: 1.5px solid transparent; transition: background .2s, border-color .2s; margin: 2px -8px; }
+  #price-area.price-hl { background: var(--bg-warning); border-color: var(--border-warning); }
+  #price-hl-badge { display: none; align-items: center; gap: 4px; font-size: 11px; font-weight: 500; color: var(--text-warning); margin-bottom: 6px; }
+  #price-area.price-hl #price-hl-badge { display: flex; }
   /* per-contract price table */
   .contract-price-table { width:100%; border-collapse:collapse; font-size:13px; margin-top:4px; }
   .contract-price-table th { background:#eef4fc; padding:5px 8px; text-align:left; font-weight:600; font-size:12px; color:#5a7fab; }
@@ -409,7 +414,7 @@
         </div>
         <div class="form-group" id="new-device-wrap" style="display:none">
           <label>機種名（手入力）</label>
-          <input type="text" id="f-device-manual" placeholder="新機種名を入力">
+          <input type="text" id="f-device-manual" placeholder="新機種名を入力" oninput="_updatePriceHighlight()">
         </div>
         <!-- 端末以外サブカテゴリ -->
         <div class="form-group" id="non-device-wrap" style="display:none">
@@ -440,6 +445,8 @@
           <label>OCR候補（金額）</label>
           <div class="candidate-list" id="price-cands"></div>
         </div>
+        <div id="price-area">
+        <div id="price-hl-badge"><i class="ti ti-star" aria-hidden="true" style="font-size:11px"></i>調査票対象</div>
         <!-- 契約種別ごと金額（MNP＋機種変更両方選択時に表示） -->
         <div id="contract-price-wrap" style="display:none">
           <div class="form-group">
@@ -465,6 +472,7 @@
             <input type="text" id="f-rebate" placeholder="例: 1万円還元、5000ポイント還元">
           </div>
         </div>
+        </div><!-- /#price-area -->
         <!-- 金額不明チェック（常に表示） -->
         <div class="form-group">
           <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;font-weight:normal;color:#555">
@@ -1631,6 +1639,7 @@ function _onDeviceChange() {
   document.getElementById('contract-wrap').style.display   = hasDevice ? '' : 'none';
   if (!hasDevice) { setContracts([]); updateContractPriceSection(); }
   if (val !== '__non_device__') document.getElementById('f-non-device-cat').value = '';
+  _updatePriceHighlight();
   updateRenamePreview();
 }
 
@@ -1710,6 +1719,14 @@ function _getEffectivePrice() {
   return (document.getElementById('f-price')?.value || '').replace(/[,，\s]/g, '');
 }
 
+function _updatePriceHighlight() {
+  const area = document.getElementById('price-area');
+  if (!area) return;
+  const device = getDeviceName();
+  const isTarget = !!(device && (candidates.rename_tags || {})[device] !== undefined);
+  area.classList.toggle('price-hl', isTarget);
+}
+
 // ── Photo modal ────────────────────────────────────────────────────────────
 
 function _setLockReadOnly(readOnly, lockedBy) {
@@ -1756,6 +1773,7 @@ async function openPhotoModal(photoId) {
   document.getElementById('f-category').value = photo.device_category || '';
   setCarriers(photo.carriers || []);
   setContracts(photo.contract_types || []);
+  _updatePriceHighlight();
   document.getElementById('f-note').value = photo.note || '';
   document.getElementById('rename-preview').textContent = photo.renamed_filename || '';
 
@@ -1844,6 +1862,7 @@ function closePhotoModal() {
   if (spWrap) spWrap.style.display = '';
   const rebateEl = document.getElementById('f-rebate');
   if (rebateEl) rebateEl.value = '';
+  document.getElementById('price-area')?.classList.remove('price-hl');
   document.getElementById('f-price-unclear').checked = false;
   onPriceUnclearChange();
   document.getElementById('photo-modal').classList.add('hidden');
