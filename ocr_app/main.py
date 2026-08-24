@@ -1197,6 +1197,169 @@ def set_device_group(data: DeviceGroupBody):
     return {"ok": True}
 
 
+# ─── Export helpers ──────────────────────────────────────────────────────────
+
+def _build_survey_sheet(wb, store_id: int | None = None):
+    """Add 調査票用 sheet: stores × devices, PI(MNP) and 取換(機種変更) min prices."""
+    import re as _re
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+
+    def _parse_price(p):
+        if not p:
+            return None
+        s = _re.sub(r"[^\d]", "", str(p))
+        return int(s) if s else None
+
+    def _fmt(price_num, dep):
+        d = _re.sub(r"[^\d]", "", str(dep or "")) or "0"
+        return f"{price_num:,}({int(d):,})"
+
+    q = """SELECT p.price, p.deposit, p.contract_types, p.device_name, p.items_json,
+                  s.code as store_code, s.name as store_name, s.id as store_id_val
+           FROM photos p LEFT JOIN stores s ON p.store_id = s.id
+           WHERE p.status = 'done'
+             AND p.device_name IS NOT NULL AND p.device_name != ''"""
+    params: list = []
+    if store_id:
+        q += " AND p.store_id = ?"; params.append(store_id)
+
+    with get_conn() as conn:
+        price_rows = conn.execute(q, params).fetchall()
+        store_rows = conn.execute(
+            "SELECT id, code, name FROM stores ORDER BY id"
+            + (" WHERE id = ?" if store_id else ""),
+            ([store_id] if store_id else [])
+        ).fetchall()
+
+    # {(store_code, device): {'MNP': (min_price, deposit), '機種変更': (min_price, deposit)}}
+    price_map: dict = {}
+    devices_ordered: list = []
+    devices_seen: set = set()
+
+    CONTRACT_COLS = {"MNP": "PI（MNP）", "機種変更": "取換（機種変更）"}
+
+    for r in price_rows:
+        r = dict(r)
+        device = (r.get("device_name") or "").strip()
+        if not device:
+            continue
+        price_num = _parse_price(r.get("price"))
+        if price_num is None:
+            continue
+        store_code = r.get("store_code") or ""
+        deposit = r.get("deposit") or "0"
+
+        try:
+            contracts = json.loads(r.get("contract_types") or "[]")
+        except Exception:
+            contracts = []
+
+        # also check items_json for extra price entries
+        try:
+            extras = [i for i in json.loads(r.get("items_json") or "[]") if i.get("type") == "price"]
+        except Exception:
+            extras = []
+
+        for ct in contracts:
+            if ct not in CONTRACT_COLS:
+                continue
+            key = (store_code, device)
+            if key not in price_map:
+                price_map[key] = {}
+            prev = price_map[key].get(ct)
+            if prev is None or price_num < prev[0]:
+                price_map[key][ct] = (price_num, deposit)
+
+        # items_json additional prices with same contract
+        for ex in extras:
+            ex_price = _parse_price(ex.get("price"))
+            if ex_price is None:
+                continue
+            ex_dep = ex.get("deposit") or "0"
+            for ct in contracts:
+                if ct not in CONTRACT_COLS:
+                    continue
+                key = (store_code, device)
+                if key not in price_map:
+                    price_map[key] = {}
+                prev = price_map[key].get(ct)
+                if prev is None or ex_price < prev[0]:
+                    price_map[key][ct] = (ex_price, ex_dep)
+
+        if device not in devices_seen:
+            devices_seen.add(device)
+            devices_ordered.append(device)
+
+    devices_ordered.sort()
+
+    ws2 = wb.create_sheet("調査票用")
+
+    # Styles
+    h1_fill = PatternFill(start_color="2B5799", end_color="2B5799", fill_type="solid")
+    h1_font = Font(color="FFFFFF", bold=True, name="Arial", size=10)
+    h2_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
+    h2_font = Font(color="FFFFFF", bold=True, name="Arial", size=9)
+    data_font = Font(name="Arial", size=10)
+    center  = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    thin    = Side(style="thin", color="AAAAAA")
+    border  = Border(left=thin, right=thin, top=thin, bottom=thin)
+
+    # Row 1: 番号 | 店舗名 | [Device (merged 2 cols)] ...
+    ws2.cell(1, 1, "番号").fill = h1_fill
+    ws2.cell(1, 1).font = h1_font
+    ws2.cell(1, 1).alignment = center
+    ws2.cell(1, 2, "店舗名").fill = h1_fill
+    ws2.cell(1, 2).font = h1_font
+    ws2.cell(1, 2).alignment = center
+
+    for i, dev in enumerate(devices_ordered):
+        col = 3 + i * 2
+        c = ws2.cell(1, col, dev)
+        c.fill = h1_fill; c.font = h1_font; c.alignment = center
+        ws2.merge_cells(start_row=1, start_column=col, end_row=1, end_column=col + 1)
+
+    # Row 2: blank | blank | PI（MNP） | 取換（機種変更） | ...
+    ws2.cell(2, 1, "").fill = h2_fill
+    ws2.cell(2, 2, "").fill = h2_fill
+    for i in range(len(devices_ordered)):
+        col = 3 + i * 2
+        c1 = ws2.cell(2, col,   "PI（MNP）")
+        c2 = ws2.cell(2, col+1, "取換（機種変更）")
+        for c in (c1, c2):
+            c.fill = h2_fill; c.font = h2_font; c.alignment = center
+
+    # Data rows
+    row_num = 3
+    for s in store_rows:
+        s = dict(s)
+        code = s.get("code") or ""
+        name = s.get("name") or ""
+        ws2.cell(row_num, 1, code).font = data_font
+        ws2.cell(row_num, 2, name).font = data_font
+        for i, dev in enumerate(devices_ordered):
+            col = 3 + i * 2
+            key = (code, dev)
+            mnp  = price_map.get(key, {}).get("MNP")
+            kika = price_map.get(key, {}).get("機種変更")
+            c1 = ws2.cell(row_num, col,   _fmt(*mnp)  if mnp  else "")
+            c2 = ws2.cell(row_num, col+1, _fmt(*kika) if kika else "")
+            c1.font = data_font; c1.alignment = Alignment(horizontal="center")
+            c2.font = data_font; c2.alignment = Alignment(horizontal="center")
+        row_num += 1
+
+    # Column widths
+    ws2.column_dimensions["A"].width = 12
+    ws2.column_dimensions["B"].width = 24
+    for i in range(len(devices_ordered)):
+        from openpyxl.utils import get_column_letter
+        ws2.column_dimensions[get_column_letter(3 + i * 2    )].width = 14
+        ws2.column_dimensions[get_column_letter(3 + i * 2 + 1)].width = 16
+
+    ws2.row_dimensions[1].height = 28
+    ws2.row_dimensions[2].height = 20
+    ws2.freeze_panes = "C3"
+
+
 # ─── Export ─────────────────────────────────────────────────────────────────
 
 @app.get("/api/export")
@@ -1280,6 +1443,9 @@ def export_excel(store_id: int | None = None, ids: str | None = None):
     for col in ws.columns:
         max_len = max(len(str(cell.value or "")) for cell in col)
         ws.column_dimensions[col[0].column_letter].width = min(max_len + 4, 40)
+
+    # ── Sheet 2: 調査票用 ──────────────────────────────────────────────────────
+    _build_survey_sheet(wb, store_id)
 
     buf = io.BytesIO()
     wb.save(buf)
