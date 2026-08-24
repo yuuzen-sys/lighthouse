@@ -445,7 +445,7 @@
           <div class="form-group">
             <label>契約種別ごとの金額</label>
             <table class="contract-price-table">
-              <thead><tr><th>契約種別</th><th>金額（円）</th><th>頭金（円）</th></tr></thead>
+              <thead><tr><th>契約種別</th><th>金額（円）</th><th>頭金（円）</th><th>追加還元</th></tr></thead>
               <tbody id="contract-price-tbody"></tbody>
             </table>
           </div>
@@ -459,6 +459,10 @@
           <div class="form-group">
             <label>頭金（円）</label>
             <input type="text" id="f-deposit" placeholder="未記載なら0円">
+          </div>
+          <div class="form-group">
+            <label>追加還元（任意）</label>
+            <input type="text" id="f-rebate" placeholder="例: 1万円還元、5000ポイント還元">
           </div>
         </div>
         <!-- 金額不明チェック（常に表示） -->
@@ -1657,7 +1661,7 @@ function setContracts(contracts) {
     b.classList.toggle('selected', contracts.includes(b.dataset.contract)));
 }
 
-const _PRICE_CONTRACTS = ['MNP', '機種変更'];
+const _PRICE_CONTRACTS = ['MNP', '機種変更', '新規'];
 
 function updateContractPriceSection() {
   const priceContracts = getSelectedContracts().filter(c => _PRICE_CONTRACTS.includes(c));
@@ -1677,7 +1681,11 @@ function _syncContractPriceRows(contracts) {
   const existing = {};
   for (const tr of tbody.querySelectorAll('tr')) {
     const ct = tr.dataset.contract;
-    existing[ct] = { price: tr.querySelector('.cp-price')?.value || '', deposit: tr.querySelector('.cp-deposit')?.value || '' };
+    existing[ct] = {
+      price:   tr.querySelector('.cp-price')?.value   || '',
+      deposit: tr.querySelector('.cp-deposit')?.value || '',
+      rebate:  tr.querySelector('.cp-rebate')?.value  || '',
+    };
   }
   const unclear = document.getElementById('f-price-unclear')?.checked;
   tbody.innerHTML = '';
@@ -1688,7 +1696,8 @@ function _syncContractPriceRows(contracts) {
     tr.innerHTML =
       `<td class="cp-label">${ct}</td>` +
       `<td><input type="text" class="cp-price" placeholder="例: 48000" oninput="updateRenamePreview()" value="${existing[ct]?.price || ''}"${dis}></td>` +
-      `<td><input type="text" class="cp-deposit" placeholder="0" value="${existing[ct]?.deposit || ''}"${dis}></td>`;
+      `<td><input type="text" class="cp-deposit" placeholder="0" value="${existing[ct]?.deposit || ''}"${dis}></td>` +
+      `<td><input type="text" class="cp-rebate" placeholder="例: 1万円還元" value="${existing[ct]?.rebate || ''}"${dis}></td>`;
     tbody.appendChild(tr);
   }
 }
@@ -1752,11 +1761,13 @@ async function openPhotoModal(photoId) {
 
   // 追加アイテム復元（type で分類）
   let _contractPriceItems = [];
+  let _rebateItem = null;
   try {
     const all = JSON.parse(photo.items_json || '[]');
     _extraItems        = all.filter(i => !i.type || i.type === 'price');
     _extraDevices      = all.filter(i => i.type === 'device');
     _contractPriceItems = all.filter(i => i.type === 'contract_price');
+    _rebateItem        = all.find(i => i.type === 'rebate') || null;
   } catch { _extraItems = []; _extraDevices = []; }
   renderExtraItems();
   renderExtraDevices();
@@ -1772,10 +1783,12 @@ async function openPhotoModal(photoId) {
       const item = cpMap[ct];
       tr.querySelector('.cp-price').value   = item ? (item.price   || '') : (photo.price   || '');
       tr.querySelector('.cp-deposit').value = item ? (item.deposit || '') : (photo.deposit || '');
+      tr.querySelector('.cp-rebate').value  = item ? (item.rebate  || '') : '';
     }
   } else {
     document.getElementById('f-price').value   = photo.price   || '';
     document.getElementById('f-deposit').value = photo.deposit || '';
+    document.getElementById('f-rebate').value  = _rebateItem?.value || '';
   }
   document.getElementById('f-price-unclear').checked = !!photo.price_unclear;
   onPriceUnclearChange();
@@ -1829,6 +1842,8 @@ function closePhotoModal() {
   const spWrap = document.getElementById('price-single-wrap');
   if (cpWrap) cpWrap.style.display = 'none';
   if (spWrap) spWrap.style.display = '';
+  const rebateEl = document.getElementById('f-rebate');
+  if (rebateEl) rebateEl.value = '';
   document.getElementById('f-price-unclear').checked = false;
   onPriceUnclearChange();
   document.getElementById('photo-modal').classList.add('hidden');
@@ -1946,14 +1961,17 @@ async function savePhoto() {
       const ct      = tr.dataset.contract;
       const price   = (tr.querySelector('.cp-price')?.value   || '').replace(/[,，\s]/g, '');
       const deposit = (tr.querySelector('.cp-deposit')?.value || '').replace(/[,，\s]/g, '');
+      const rebate  = (tr.querySelector('.cp-rebate')?.value  || '').trim();
       if (price) {
-        extraItems.push({ type: 'contract_price', contract: ct, price, deposit: deposit || '0' });
+        extraItems.push({ type: 'contract_price', contract: ct, price, deposit: deposit || '0', rebate });
         if (first) { mainPrice = price; mainDeposit = deposit || null; first = false; }
       }
     }
   } else {
     mainPrice   = document.getElementById('f-price').value.replace(/[,，\s]/g, '')   || null;
     mainDeposit = document.getElementById('f-deposit').value.replace(/[,，\s]/g, '') || null;
+    const mainRebate = (document.getElementById('f-rebate')?.value || '').trim();
+    if (mainRebate) extraItems.push({ type: 'rebate', value: mainRebate });
   }
 
   const body = {
@@ -2460,11 +2478,13 @@ function onPriceUnclearChange() {
   priceEl.disabled   = checked;
   depositEl.disabled = checked;
   if (checked) { priceEl.value = ''; depositEl.value = ''; }
-  // Also disable per-contract inputs
-  document.querySelectorAll('#contract-price-tbody .cp-price, #contract-price-tbody .cp-deposit').forEach(el => {
+  // Also disable per-contract inputs and single-mode rebate
+  document.querySelectorAll('#contract-price-tbody .cp-price, #contract-price-tbody .cp-deposit, #contract-price-tbody .cp-rebate').forEach(el => {
     el.disabled = checked;
     if (checked) el.value = '';
   });
+  const rebateEl = document.getElementById('f-rebate');
+  if (rebateEl) { rebateEl.disabled = checked; if (checked) rebateEl.value = ''; }
   updateRenamePreview();
 }
 

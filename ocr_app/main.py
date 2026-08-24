@@ -1211,9 +1211,10 @@ def _build_survey_sheet(wb, store_id: int | None = None):
         s = _re.sub(r"[^\d]", "", str(p))
         return int(s) if s else None
 
-    def _fmt(price_num, dep):
+    def _fmt(price_num, dep, rebate=""):
         d = _re.sub(r"[^\d]", "", str(dep or "")) or "0"
-        return f"{price_num:,}({int(d):,})"
+        base = f"{price_num:,}({int(d):,})"
+        return f"{base}+{rebate}" if rebate else base
 
     q = """SELECT p.price, p.deposit, p.contract_types, p.device_name, p.carriers, p.items_json,
                   s.code as store_code, s.name as store_name
@@ -1262,20 +1263,30 @@ def _build_survey_sheet(wb, store_id: int | None = None):
         except Exception:
             carriers = [None]
 
-        entries_default: list[tuple] = [(price_num, deposit)]
-        contract_specific: dict = {}  # {contract: (price, deposit)} from per-contract input
+        # Read rebate for main/default price ({type:'rebate'} stored in single-price mode)
+        main_rebate = ""
+        try:
+            for ex in json.loads(r.get("items_json") or "[]"):
+                if ex.get("type") == "rebate":
+                    main_rebate = ex.get("value") or ""
+                    break
+        except Exception:
+            pass
+
+        entries_default: list[tuple] = [(price_num, deposit, main_rebate)]
+        contract_specific: dict = {}  # {contract: (price, deposit, rebate)} from per-contract input
         try:
             for ex in json.loads(r.get("items_json") or "[]"):
                 if ex.get("type") == "price":
                     ep = _parse_price(ex.get("price"))
                     if ep is not None:
-                        entries_default.append((ep, ex.get("deposit") or "0"))
+                        entries_default.append((ep, ex.get("deposit") or "0", ""))
                 elif ex.get("type") == "contract_price":
                     ct_key = ex.get("contract")
                     if ct_key in CONTRACT_KEYS:
                         ep = _parse_price(ex.get("price"))
                         if ep is not None:
-                            contract_specific[ct_key] = (ep, ex.get("deposit") or "0")
+                            contract_specific[ct_key] = (ep, ex.get("deposit") or "0", ex.get("rebate") or "")
         except Exception:
             pass
 
@@ -1285,11 +1296,11 @@ def _build_survey_sheet(wb, store_id: int | None = None):
             # Per-contract price takes priority; fall back to default entries
             ct_entries = [contract_specific[ct]] if ct in contract_specific else entries_default
             for car in carriers:
-                for ep, ed in ct_entries:
+                for ep, ed, er in ct_entries:
                     key = (store_code, device, car, ct)
                     prev = price_map.get(key)
                     if prev is None or ep < prev[0]:
-                        price_map[key] = (ep, ed)
+                        price_map[key] = (ep, ed, er)
 
     # Row expansion: return list of (区分ラベル, carrier_filter)
     def _row_defs(code: str) -> list[tuple[str, str | None]]:
