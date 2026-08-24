@@ -61,6 +61,10 @@
   #price-area.price-hl { background: #fffbeb; border-color: #f59e0b; }
   #price-hl-badge { display: none; align-items: center; gap: 4px; font-size: 11px; font-weight: 500; color: #b45309; margin-bottom: 6px; }
   #price-area.price-hl #price-hl-badge { display: flex; }
+  /* 特典利用料セクション */
+  #tokuten-section { margin-top: 8px; padding-top: 6px; border-top: 1px dashed #c5d8ef; }
+  .tokuten-label { display:flex; align-items:center; gap:6px; cursor:pointer; font-size:12px; color:#555; }
+  .tokuten-carrier-cb-wrap { display:flex; align-items:center; gap:4px; cursor:pointer; font-size:12px; color:#555; }
   /* per-contract price table */
   .contract-price-table { width:100%; border-collapse:collapse; font-size:13px; margin-top:4px; }
   .contract-price-table th { background:#eef4fc; padding:5px 8px; text-align:left; font-weight:600; font-size:12px; color:#5a7fab; }
@@ -470,6 +474,21 @@
           <div class="form-group">
             <label>追加還元（任意）</label>
             <input type="text" id="f-rebate" placeholder="例: 1万円還元、5000ポイント還元">
+          </div>
+        </div>
+        <!-- 特典利用料加算 -->
+        <div id="tokuten-section">
+          <!-- 単一モード（キャリア0〜1選択時） -->
+          <div id="tokuten-single-wrap">
+            <label class="tokuten-label">
+              <input type="checkbox" id="f-tokuten">
+              特典利用料を加算して記録（+22,000円）
+            </label>
+          </div>
+          <!-- 複数キャリアモード（2つ以上選択時） -->
+          <div id="tokuten-multi-wrap" style="display:none">
+            <div style="font-size:12px;color:#555;margin-bottom:4px">特典利用料を加算して記録（+22,000円）</div>
+            <div id="tokuten-carrier-list" style="display:flex;flex-wrap:wrap;gap:4px 14px"></div>
           </div>
         </div>
         </div><!-- /#price-area -->
@@ -1277,6 +1296,15 @@ function _fmtPrice(v) {
   const n = Number(String(v).replace(/[,，\s]/g, ''));
   return isNaN(n) ? `¥${v}` : `¥${n.toLocaleString()}`;
 }
+function _selectPriceCand(chip, val) {
+  document.getElementById('f-price').value = val;
+  updateRenamePreview();
+  navigator.clipboard?.writeText(String(val)).catch(() => {});
+  const orig = chip.innerHTML;
+  chip.innerHTML = '<span>✓ コピー</span>';
+  chip.style.background = '#d1fae5';
+  setTimeout(() => { chip.innerHTML = orig; chip.style.background = ''; }, 1200);
+}
 function _fmtPriceDeposit(price, deposit) {
   if (!price) return '';
   const p    = _fmtPrice(price);
@@ -1651,7 +1679,7 @@ function getDeviceName() {
 }
 
 // ── Carrier buttons ────────────────────────────────────────────────────────
-function toggleCarrier(btn)  { btn.classList.toggle('selected'); updateRenamePreview(); }
+function toggleCarrier(btn)  { btn.classList.toggle('selected'); updateTokutenSection(); updateRenamePreview(); }
 function toggleContract(btn) { btn.classList.toggle('selected'); updateContractPriceSection(); }
 
 function getSelectedCarriers() {
@@ -1719,6 +1747,37 @@ function _getEffectivePrice() {
   return (document.getElementById('f-price')?.value || '').replace(/[,，\s]/g, '');
 }
 
+function updateTokutenSection() {
+  const carriers = getSelectedCarriers();
+  const sw = document.getElementById('tokuten-single-wrap');
+  const mw = document.getElementById('tokuten-multi-wrap');
+  if (!sw || !mw) return;
+  const isMulti = carriers.length >= 2;
+  sw.style.display = isMulti ? 'none' : '';
+  mw.style.display = isMulti ? '' : 'none';
+  if (isMulti) _syncTokutenCarriers(carriers);
+}
+
+function _syncTokutenCarriers(carriers) {
+  const list = document.getElementById('tokuten-carrier-list');
+  if (!list) return;
+  const prev = {};
+  list.querySelectorAll('.tokuten-carrier-cb').forEach(cb => { prev[cb.dataset.carrier] = cb.checked; });
+  list.innerHTML = '';
+  for (const car of carriers) {
+    const lbl = document.createElement('label');
+    lbl.className = 'tokuten-carrier-cb-wrap';
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.className = 'tokuten-carrier-cb';
+    cb.dataset.carrier = car;
+    cb.checked = prev[car] || false;
+    lbl.appendChild(cb);
+    lbl.appendChild(document.createTextNode(car));
+    list.appendChild(lbl);
+  }
+}
+
 function _updatePriceHighlight() {
   const area = document.getElementById('price-area');
   if (!area) return;
@@ -1772,6 +1831,7 @@ async function openPhotoModal(photoId) {
   _onDeviceChange();
   document.getElementById('f-category').value = photo.device_category || '';
   setCarriers(photo.carriers || []);
+  updateTokutenSection();
   setContracts(photo.contract_types || []);
   _updatePriceHighlight();
   document.getElementById('f-note').value = photo.note || '';
@@ -1780,12 +1840,14 @@ async function openPhotoModal(photoId) {
   // 追加アイテム復元（type で分類）
   let _contractPriceItems = [];
   let _rebateItem = null;
+  let _tokutenItem = null;
   try {
     const all = JSON.parse(photo.items_json || '[]');
     _extraItems        = all.filter(i => !i.type || i.type === 'price');
     _extraDevices      = all.filter(i => i.type === 'device');
     _contractPriceItems = all.filter(i => i.type === 'contract_price');
     _rebateItem        = all.find(i => i.type === 'rebate') || null;
+    _tokutenItem       = all.find(i => i.type === 'tokuten') || null;
   } catch { _extraItems = []; _extraDevices = []; }
   renderExtraItems();
   renderExtraDevices();
@@ -1810,6 +1872,18 @@ async function openPhotoModal(photoId) {
   }
   document.getElementById('f-price-unclear').checked = !!photo.price_unclear;
   onPriceUnclearChange();
+  // 特典利用料チェック復元
+  if (_tokutenItem) {
+    const tCarriers = _tokutenItem.carriers || [];
+    if (tCarriers.includes('__all__')) {
+      const cb = document.getElementById('f-tokuten');
+      if (cb) cb.checked = true;
+    } else {
+      document.querySelectorAll('.tokuten-carrier-cb').forEach(cb => {
+        cb.checked = tCarriers.includes(cb.dataset.carrier);
+      });
+    }
+  }
   document.getElementById('device-cands').innerHTML = '';
   document.getElementById('price-cands').innerHTML = '';
   document.getElementById('raw-box').textContent = '';
@@ -1863,6 +1937,13 @@ function closePhotoModal() {
   const rebateEl = document.getElementById('f-rebate');
   if (rebateEl) rebateEl.value = '';
   document.getElementById('price-area')?.classList.remove('price-hl');
+  const _tkCb = document.getElementById('f-tokuten');
+  if (_tkCb) _tkCb.checked = false;
+  document.querySelectorAll('.tokuten-carrier-cb').forEach(cb => { cb.checked = false; });
+  const _twS = document.getElementById('tokuten-single-wrap');
+  const _twM = document.getElementById('tokuten-multi-wrap');
+  if (_twS) _twS.style.display = '';
+  if (_twM) _twM.style.display = 'none';
   document.getElementById('f-price-unclear').checked = false;
   onPriceUnclearChange();
   document.getElementById('photo-modal').classList.add('hidden');
@@ -1889,7 +1970,7 @@ function displayOcrResult(data) {
   const pEl = document.getElementById('price-cands');
   if (data.price_candidates?.length) {
     pEl.innerHTML = data.price_candidates.map(p => `
-      <div class="cand-chip" onclick="document.getElementById('f-price').value='${p}'">
+      <div class="cand-chip" onclick="_selectPriceCand(this,'${p}')">
         <span>${_fmtPrice(p)}</span>
       </div>`).join('');
     if (!document.getElementById('f-price').value)
@@ -1991,6 +2072,17 @@ async function savePhoto() {
     mainDeposit = document.getElementById('f-deposit').value.replace(/[,，\s]/g, '') || null;
     const mainRebate = (document.getElementById('f-rebate')?.value || '').trim();
     if (mainRebate) extraItems.push({ type: 'rebate', value: mainRebate });
+  }
+
+  // 特典利用料
+  const _tSwVisible = document.getElementById('tokuten-single-wrap')?.style.display !== 'none';
+  if (_tSwVisible) {
+    if (document.getElementById('f-tokuten')?.checked)
+      extraItems.push({ type: 'tokuten', carriers: ['__all__'] });
+  } else {
+    const tChk = [...document.querySelectorAll('.tokuten-carrier-cb')]
+      .filter(cb => cb.checked).map(cb => cb.dataset.carrier);
+    if (tChk.length) extraItems.push({ type: 'tokuten', carriers: tChk });
   }
 
   const body = {

@@ -1273,6 +1273,21 @@ def _build_survey_sheet(wb, store_id: int | None = None):
         except Exception:
             pass
 
+        # Read tokuten carriers (+22,000 surcharge)
+        tokuten_all = False
+        tokuten_carriers_set: set = set()
+        try:
+            for ex in json.loads(r.get("items_json") or "[]"):
+                if ex.get("type") == "tokuten":
+                    tc = ex.get("carriers") or []
+                    if "__all__" in tc:
+                        tokuten_all = True
+                    else:
+                        tokuten_carriers_set.update(tc)
+                    break
+        except Exception:
+            pass
+
         entries_default: list[tuple] = [(price_num, deposit, main_rebate)]
         contract_specific: dict = {}  # {contract: (price, deposit, rebate)} from per-contract input
         try:
@@ -1296,11 +1311,13 @@ def _build_survey_sheet(wb, store_id: int | None = None):
             # Per-contract price takes priority; fall back to default entries
             ct_entries = [contract_specific[ct]] if ct in contract_specific else entries_default
             for car in carriers:
+                surcharge = 22000 if (tokuten_all or car in tokuten_carriers_set) else 0
                 for ep, ed, er in ct_entries:
+                    adj_ep = ep + surcharge
                     key = (store_code, device, car, ct)
                     prev = price_map.get(key)
-                    if prev is None or ep < prev[0]:
-                        price_map[key] = (ep, ed, er)
+                    if prev is None or adj_ep < prev[0]:
+                        price_map[key] = (adj_ep, ed, er)
 
     # Row expansion: return list of (区分ラベル, carrier_filter)
     def _row_defs(code: str) -> list[tuple[str, str | None]]:
