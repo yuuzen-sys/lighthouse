@@ -741,7 +741,8 @@ def update_photo(photo_id: int, data: PhotoUpdate):
                SET device_name = ?, device_category = ?, price = ?, deposit = ?, note = ?,
                    carriers = ?, contract_types = ?, non_device_category = ?, items_json = ?,
                    price_unclear = ?,
-                   status = 'confirmed', updated_at = CURRENT_TIMESTAMP
+                   status = CASE WHEN status = 'done' THEN 'done' ELSE 'confirmed' END,
+                   updated_at = CURRENT_TIMESTAMP
                WHERE id = ?""",
             (data.device_name, data.device_category, data.price, data.deposit, data.note,
              carriers_json, contract_types_json, data.non_device_category, items_json,
@@ -1219,7 +1220,7 @@ def _build_survey_sheet(wb, store_id: int | None = None):
     q = """SELECT p.price, p.deposit, p.contract_types, p.device_name, p.carriers, p.items_json,
                   s.code as store_code, s.name as store_name
            FROM photos p LEFT JOIN stores s ON p.store_id = s.id
-           WHERE p.status = 'done'
+           WHERE p.status IN ('done', 'confirmed')
              AND p.device_name IS NOT NULL AND p.device_name != ''"""
     params: list = []
     if store_id:
