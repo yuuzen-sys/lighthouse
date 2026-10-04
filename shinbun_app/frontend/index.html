@@ -48,6 +48,8 @@ tbody tr:hover { background: #e8f0f8; }
 td { padding: 9px 12px; border-bottom: 1px solid #eee; vertical-align: middle; font-size: 15px; }
 
 .tag { display: inline-block; padding: 3px 10px; border-radius: 10px; font-size: 13px; font-weight: bold; margin: 1px; }
+.reorg-chip { background: #fff; border: 1px solid #ccc; border-radius: 4px; padding: 4px 10px; font-size: 13px; cursor: grab; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 180px; user-select: none; }
+.reorg-chip:active { cursor: grabbing; }
 .tag-active   { background: #e8f5e9; color: #2e7d32; border: 1px solid #a5d6a7; }
 .tag-inactive { background: #fce4ec; color: #c62828; border: 1px solid #ef9a9a; }
 .tag-no-coll  { background: #fff3e0; color: #e65100; border: 1px solid #ffcc80; }
@@ -160,6 +162,18 @@ td { padding: 9px 12px; border-bottom: 1px solid #eee; vertical-align: middle; f
     </div>
     <p class="text-muted" style="margin-bottom:12px;">HコースとNコースを個別に管理します。各コースに担当者・略称・単価・所属読者を設定できます。</p>
     <div id="course-list"></div>
+  </div>
+  <div class="card">
+    <div class="card-title">
+      コース再編
+      <div style="display:flex;gap:6px;align-items:center;font-size:13px;font-weight:normal;">
+        <select id="reorg-y" style="padding:3px 6px;border:1px solid #ccc;border-radius:4px;font-size:13px;"></select>年
+        <select id="reorg-m" style="padding:3px 6px;border:1px solid #ccc;border-radius:4px;font-size:13px;"></select>月時点
+        <button class="btn btn-secondary btn-sm" onclick="loadReorgView()">表示</button>
+      </div>
+    </div>
+    <p class="text-muted" style="margin-bottom:12px;">読者名をドラッグ＆ドロップしてコース間・個別配達間を移動できます。変更は即時反映されます。個別配達への移動後は「一括設定」から担当者を設定してください。</p>
+    <div id="reorg-area" style="display:none;overflow-x:auto;padding-bottom:8px;"></div>
   </div>
 </div>
 
@@ -630,6 +644,7 @@ const _APP_TODAY_M = 12;
 (async () => {
   document.getElementById('sub-year').value = _APP_TODAY_Y;
   document.getElementById('sub-month').value = _APP_TODAY_M;
+  initReorgPicker();
   await Promise.all([loadNewspapers(), loadReaders(), loadStaff(), loadUnitPrices(), loadCourses()]);
 })();
 
@@ -1034,6 +1049,147 @@ async function removeReaderFromCourseModal(cid, rid) {
   await Promise.all([loadCourses(), loadReaders()]);
   const c = courses.find(x => x.id === cid);
   if (c) renderCourseReadersInModal(c);
+}
+
+// ── コース再編（ドラッグ＆ドロップ） ─────────────────────────────────────────
+let _reorgDrag = null;
+
+function initReorgPicker() {
+  const ysel = document.getElementById('reorg-y');
+  const msel = document.getElementById('reorg-m');
+  if (!ysel || !msel) return;
+  ysel.innerHTML = '';
+  for (let y = 2020; y <= 2030; y++) {
+    const opt = document.createElement('option');
+    opt.value = y; opt.textContent = y + '年';
+    if (y === _APP_TODAY_Y) opt.selected = true;
+    ysel.appendChild(opt);
+  }
+  msel.innerHTML = '';
+  for (let m = 1; m <= 12; m++) {
+    const opt = document.createElement('option');
+    opt.value = m; opt.textContent = m + '月';
+    if (m === _APP_TODAY_M) opt.selected = true;
+    msel.appendChild(opt);
+  }
+}
+
+function loadReorgView() {
+  const y = parseInt(document.getElementById('reorg-y').value);
+  const m = parseInt(document.getElementById('reorg-m').value);
+  document.getElementById('reorg-area').style.display = '';
+  renderReorgArea(y, m);
+}
+
+function _hasSubAt(r, npType, y, m) {
+  return (r.subscriptions || []).some(s => {
+    if (s.newspaper_type !== npType) return false;
+    const sy = s.start_year, sm = s.start_month;
+    const ey = s.end_year, em = s.end_month;
+    if (sy && (sy * 12 + (sm || 1) > y * 12 + m)) return false;
+    if (ey && (ey * 12 + (em || 12) < y * 12 + m)) return false;
+    return true;
+  });
+}
+
+function renderReorgArea(y, m) {
+  const area = document.getElementById('reorg-area');
+  const hCourses = courses.filter(c => c.newspaper_type === 'H');
+  const nCourses = courses.filter(c => c.newspaper_type === 'N');
+  const hReaders = readers.filter(r => _hasSubAt(r, 'H', y, m));
+  const nReaders = readers.filter(r => _hasSubAt(r, 'N', y, m));
+  let html = '';
+  if (hCourses.length || hReaders.length) {
+    html += `<div style="margin-bottom:20px;"><div style="font-weight:700;color:#1565c0;font-size:14px;padding:6px 0;border-bottom:2px solid #1565c0;margin-bottom:10px;">H紙（日刊紙）</div><div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-start;">`;
+    for (const c of hCourses) {
+      const crs = hReaders.filter(r => (r.courses||[]).some(cr => cr.course_id === c.id));
+      html += _renderReorgCol('course', c.id, c.name + (c.short_name ? `（${c.short_name}）` : ''), 'H', crs);
+    }
+    const indivH = hReaders.filter(r => !(r.courses||[]).some(cr => cr.newspaper_type === 'H'));
+    html += _renderReorgCol('individual', null, '個別配達', 'H', indivH);
+    html += '</div></div>';
+  }
+  if (nCourses.length || nReaders.length) {
+    html += `<div><div style="font-weight:700;color:#2e7d32;font-size:14px;padding:6px 0;border-bottom:2px solid #2e7d32;margin-bottom:10px;">N紙（日曜版）</div><div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-start;">`;
+    for (const c of nCourses) {
+      const crs = nReaders.filter(r => (r.courses||[]).some(cr => cr.course_id === c.id));
+      html += _renderReorgCol('course', c.id, c.name + (c.short_name ? `（${c.short_name}）` : ''), 'N', crs);
+    }
+    const indivN = nReaders.filter(r => !(r.courses||[]).some(cr => cr.newspaper_type === 'N'));
+    html += _renderReorgCol('individual', null, '個別配達', 'N', indivN);
+    html += '</div></div>';
+  }
+  area.innerHTML = html || '<div class="empty">表示する読者・コース情報がありません</div>';
+}
+
+function _renderReorgCol(type, courseId, title, npType, colReaders) {
+  const isIndiv = type === 'individual';
+  const hdrColor = npType === 'H' ? (isIndiv ? '#546e7a' : '#1565c0') : (isIndiv ? '#558b2f' : '#2e7d32');
+  const bgColor  = isIndiv ? '#f5f5f5' : (npType === 'H' ? '#e8f0fb' : '#e8f5e9');
+  const bdColor  = isIndiv ? '#bbb' : (npType === 'H' ? '#90b4e8' : '#80c995');
+  const chips = colReaders.map(r => {
+    const d = JSON.stringify({reader_id:r.id, name:r.name, np_type:npType, source_type:type, course_id:courseId});
+    return `<div class="reorg-chip" draggable="true" data-drag="${d.replace(/"/g,'&quot;')}" ondragstart="reorgDragStart(event)" ondragend="reorgDragEnd(event)" title="${esc(r.name)}">${esc(r.name)}</div>`;
+  }).join('');
+  return `<div data-col-type="${type}" data-col-cid="${courseId||''}" data-col-np="${npType}" ondragover="reorgDragOver(event,this)" ondragleave="reorgDragLeave(this)" ondrop="reorgDrop(event,this)" style="min-width:150px;max-width:200px;border:2px solid ${bdColor};border-radius:6px;background:${bgColor};flex-shrink:0;">
+    <div style="background:${hdrColor};color:#fff;padding:5px 10px;font-size:13px;font-weight:600;border-radius:4px 4px 0 0;">${esc(title)}<span style="font-size:11px;opacity:.8;margin-left:4px;">(${colReaders.length}名)</span></div>
+    <div style="padding:6px;min-height:50px;display:flex;flex-direction:column;gap:4px;">${chips || '<span style="font-size:12px;color:#aaa;padding:2px 4px;">（なし）</span>'}</div>
+  </div>`;
+}
+
+function reorgDragStart(ev) {
+  _reorgDrag = JSON.parse(ev.currentTarget.getAttribute('data-drag').replace(/&quot;/g, '"'));
+  ev.dataTransfer.effectAllowed = 'move';
+  ev.currentTarget.style.opacity = '0.4';
+}
+
+function reorgDragEnd(ev) {
+  ev.currentTarget.style.opacity = '';
+  _reorgDrag = null;
+}
+
+function reorgDragOver(ev, col) {
+  ev.preventDefault();
+  if (!_reorgDrag) return;
+  if (_reorgDrag.np_type !== col.dataset.colNp) { ev.dataTransfer.dropEffect = 'none'; return; }
+  const same = col.dataset.colType === _reorgDrag.source_type &&
+    (col.dataset.colType === 'individual' || String(col.dataset.colCid) === String(_reorgDrag.course_id));
+  if (same) { ev.dataTransfer.dropEffect = 'none'; return; }
+  ev.dataTransfer.dropEffect = 'move';
+  col.style.outline = '2px dashed #f57c00';
+}
+
+function reorgDragLeave(col) { col.style.outline = ''; }
+
+async function reorgDrop(ev, col) {
+  ev.preventDefault();
+  col.style.outline = '';
+  if (!_reorgDrag) return;
+  const { reader_id, name, source_type: srcType, course_id: srcCid, np_type } = _reorgDrag;
+  const tType = col.dataset.colType;
+  const tCid = col.dataset.colCid ? parseInt(col.dataset.colCid) : null;
+  _reorgDrag = null;
+  if (np_type !== col.dataset.colNp) return;
+  const same = tType === srcType && (tType === 'individual' || String(tCid) === String(srcCid));
+  if (same) return;
+  try {
+    if (srcType === 'course' && srcCid) await api('DELETE', `/courses/${srcCid}/readers/${reader_id}`);
+    if (tType === 'course' && tCid)     await api('POST',   `/courses/${tCid}/readers`, { reader_id });
+    await Promise.all([loadCourses(), loadReaders()]);
+    const y = parseInt(document.getElementById('reorg-y').value);
+    const m = parseInt(document.getElementById('reorg-m').value);
+    renderReorgArea(y, m);
+    if (tType === 'individual') {
+      const area = document.getElementById('reorg-area');
+      const note = document.createElement('div');
+      note.style.cssText = 'background:#fff3cd;border:1px solid #ffc107;border-radius:4px;padding:8px 12px;margin-bottom:8px;font-size:13px;';
+      note.innerHTML = `<b>${esc(name)}</b> を個別配達に移動しました。担当者を設定する場合は「一括設定」をご利用ください。`;
+      area.insertBefore(note, area.firstChild);
+      setTimeout(() => note.remove(), 6000);
+    }
+  } catch(e) {
+    alert('変更に失敗しました: ' + (e.message || e));
+  }
 }
 
 function updateCourseFilter() {
